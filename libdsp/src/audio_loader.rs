@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use log::info;
 use symphonia::core::{
     codecs::{CODEC_TYPE_NULL, DecoderOptions},
     formats::FormatOptions,
@@ -40,6 +41,8 @@ pub struct TrackAudioData {
 impl TrackAudioData {
     #[allow(clippy::manual_let_else, clippy::while_let_loop)]
     pub fn load_from_file(file: &PathBuf) -> Result<TrackAudioData, TrackLoadError> {
+        info!("Loading audio file: {}", file.display());
+
         let source_file = std::fs::File::open(file).map_err(TrackLoadError::FileNotFound)?;
 
         let media_source_stream =
@@ -343,15 +346,15 @@ impl TrackAudioData {
         &self,
         start: Timecode,
         end: Timecode,
-        wrap: Option<(Timecode, Timecode)>,
+        wrap: Option<(Timecode, Timecode, usize)>,
         output_buffers: &mut [Vec<f32>; AUDIO_CHANNELS],
     ) -> usize {
         let total_source_buffers = self.samples.len();
 
         match (start, end, wrap) {
             (start, end, None) => {
-                let start = nanoseconds_to_samples(start.to_nanoseconds(), self.sample_rate);
-                let end = nanoseconds_to_samples(end.to_nanoseconds(), self.sample_rate);
+                let start = nanoseconds_to_samples(start.nanoseconds, self.sample_rate);
+                let end = nanoseconds_to_samples(end.nanoseconds, self.sample_rate);
 
                 let total_samples = if start < end {
                     (end - start) as usize
@@ -402,18 +405,24 @@ impl TrackAudioData {
                 total_samples
             }
 
-            (start, end, Some((wrap_start, wrap_end))) => {
-                let start = nanoseconds_to_samples(start.to_nanoseconds(), self.sample_rate);
-                let wrap_start =
-                    nanoseconds_to_samples(wrap_start.to_nanoseconds(), self.sample_rate);
-                let wrap_end = nanoseconds_to_samples(wrap_end.to_nanoseconds(), self.sample_rate);
-                let end = nanoseconds_to_samples(end.to_nanoseconds(), self.sample_rate);
+            (start, end, Some((wrap_start, wrap_end, wrap_count))) => {
+                let start = nanoseconds_to_samples(start.nanoseconds, self.sample_rate);
+                let wrap_start = nanoseconds_to_samples(wrap_start.nanoseconds, self.sample_rate);
+                let wrap_end = nanoseconds_to_samples(wrap_end.nanoseconds, self.sample_rate);
+                let end = nanoseconds_to_samples(end.nanoseconds, self.sample_rate);
+
+                let wraps_to_read = wrap_count.saturating_sub(1);
 
                 let total_prewrap_samples = if start < wrap_start {
                     (wrap_start - start) as usize
                 } else {
                     (start - wrap_start) as usize
                 };
+                let total_wrapped_samples = if wrap_start < wrap_end {
+                    (wrap_end - wrap_start) as usize
+                } else {
+                    (wrap_start - wrap_end) as usize
+                } * wraps_to_read;
                 let total_postwrap_samples = if wrap_end < end {
                     (end - wrap_end) as usize
                 } else {
@@ -421,8 +430,13 @@ impl TrackAudioData {
                 };
 
                 for buffer in output_buffers.iter_mut() {
-                    if buffer.len() < total_prewrap_samples + total_postwrap_samples {
-                        buffer.resize(total_prewrap_samples + total_postwrap_samples, 0.0);
+                    if buffer.len()
+                        < (total_prewrap_samples + total_wrapped_samples + total_postwrap_samples)
+                    {
+                        buffer.resize(
+                            total_prewrap_samples + total_wrapped_samples + total_postwrap_samples,
+                            0.0,
+                        );
                     }
                 }
 
@@ -460,13 +474,54 @@ impl TrackAudioData {
                     }
                 }
 
+                for _ in 0..wraps_to_read {
+                    if wrap_start < wrap_end {
+                        for buffer_index in 0..AUDIO_CHANNELS {
+                            let max_sample_index =
+                                self.samples[buffer_index % total_source_buffers].len() as i64;
+
+                            for (target_index, source_index) in (wrap_start..wrap_end).enumerate() {
+                                output_buffers[buffer_index]
+                                    [target_index + total_prewrap_samples] =
+                                    if source_index >= 0 && source_index < max_sample_index {
+                                        self.samples[buffer_index % total_source_buffers]
+                                            [source_index as usize]
+                                            * db_to_amplitude(self.base_gain)
+                                    } else {
+                                        0.0
+                                    };
+                            }
+                        }
+                    } else {
+                        for buffer_index in 0..AUDIO_CHANNELS {
+                            let max_sample_index =
+                                self.samples[buffer_index % total_source_buffers].len() as i64;
+
+                            for (target_index, source_index) in
+                                (wrap_end..wrap_start).rev().enumerate()
+                            {
+                                output_buffers[buffer_index]
+                                    [target_index + total_prewrap_samples] =
+                                    if source_index >= 0 && source_index < max_sample_index {
+                                        self.samples[buffer_index % total_source_buffers]
+                                            [source_index as usize]
+                                            * db_to_amplitude(self.base_gain)
+                                    } else {
+                                        0.0
+                                    };
+                            }
+                        }
+                    }
+                }
+
                 if wrap_end < end {
                     for buffer_index in 0..AUDIO_CHANNELS {
                         let max_sample_index =
                             self.samples[buffer_index % total_source_buffers].len() as i64;
 
                         for (target_index, source_index) in (wrap_end..end).enumerate() {
-                            output_buffers[buffer_index][target_index + total_prewrap_samples] =
+                            output_buffers[buffer_index]
+                                [target_index + total_prewrap_samples + total_wrapped_samples] =
                                 if source_index >= 0 && source_index < max_sample_index {
                                     self.samples[buffer_index % total_source_buffers]
                                         [source_index as usize]
@@ -482,7 +537,8 @@ impl TrackAudioData {
                             self.samples[buffer_index % total_source_buffers].len() as i64;
 
                         for (target_index, source_index) in (end..wrap_end).rev().enumerate() {
-                            output_buffers[buffer_index][target_index + total_prewrap_samples] =
+                            output_buffers[buffer_index]
+                                [target_index + total_prewrap_samples + total_wrapped_samples] =
                                 if source_index >= 0 && source_index < max_sample_index {
                                     self.samples[buffer_index % total_source_buffers]
                                         [source_index as usize]
@@ -494,7 +550,7 @@ impl TrackAudioData {
                     }
                 }
 
-                total_prewrap_samples + total_postwrap_samples
+                total_prewrap_samples + total_wrapped_samples + total_postwrap_samples
             }
         }
     }

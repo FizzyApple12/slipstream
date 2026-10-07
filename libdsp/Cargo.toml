@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 timecode = { path = "../timecode" }
+log.workspace = true
 num.workspace = true
 num-complex.workspace = true
 thiserror.workspace = true

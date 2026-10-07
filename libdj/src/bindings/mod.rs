@@ -171,14 +171,18 @@ impl DeckControlEvent {
             DeckControlEvent::PlayerQuantizePress { channel } => {
                 player_quantize_press(deck_state, channel);
             }
-            DeckControlEvent::PlayerSlipPress { channel } => player_slip_press(deck_state, channel),
+            DeckControlEvent::PlayerSlipPress { channel } => {
+                player_slip_press(deck_state, channel);
+            }
 
-            DeckControlEvent::PlayerPlayPress { channel } => player_play_press(deck_state, channel),
+            DeckControlEvent::PlayerPlayPress { channel } => {
+                player_play_press(deck_state, channel);
+            }
             DeckControlEvent::PlayerReversePress { channel } => {
-                log::warn!("Unbound Action: Player Reverse Press on channel {channel}");
+                player_reverse_press(deck_state, channel);
             }
             DeckControlEvent::PlayerReverseRelease { channel } => {
-                log::warn!("Unbound Action: Player Reverse Release on channel {channel}");
+                player_reverse_release(deck_state, channel);
             }
             DeckControlEvent::PlayerCuePress { channel } => {
                 player_cue_press(deck_state, channel, false);
@@ -231,24 +235,25 @@ impl DeckControlEvent {
             }
 
             DeckControlEvent::PlayerBeatLoopInPress { channel } => {
-                log::warn!("Unbound Action: Player Beat Loop In Press on channel {channel}");
+                player_beat_loop_in_press(deck_state, channel);
             }
             DeckControlEvent::PlayerBeatLoopInAdjustPress { channel } => {
-                log::warn!("Unbound Action: Player Beat Loop In Adjust Press on channel {channel}");
+                player_beat_loop_in_adjust_press(deck_state, channel);
             }
             DeckControlEvent::PlayerBeatLoopOutPress { channel } => {
-                log::warn!("Unbound Action: Player Beat Loop Out Press on channel {channel}");
+                player_beat_loop_out_press(deck_state, channel);
             }
             DeckControlEvent::PlayerBeatLoopOutAdjustPress { channel } => {
-                log::warn!(
-                    "Unbound Action: Player Beat Loop Out Adjust Press on channel {channel}"
-                );
+                player_beat_loop_out_adjust_press(deck_state, channel);
+            }
+            DeckControlEvent::PlayerBeatLoopExitPress { channel } => {
+                player_beat_loop_exit_press(deck_state, channel);
             }
             DeckControlEvent::PlayerReLoopPress { channel } => {
-                log::warn!("Unbound Action: Player ReLoop Press on channel {channel}");
+                player_re_loop_press(deck_state, channel);
             }
             DeckControlEvent::PlayerInstantLoopPress { channel } => {
-                log::warn!("Unbound Action: Player Instant Loop Press on channel {channel}");
+                player_instant_loop_press(deck_state, channel);
             }
 
             DeckControlEvent::PlayerPadPress { channel, number } => {

@@ -178,6 +178,36 @@ impl Sub for Duration {
     }
 }
 
+impl Mul<i32> for Duration {
+    type Output = Duration;
+
+    fn mul(self, rhs: i32) -> Self::Output {
+        Duration {
+            nanoseconds: self.nanoseconds * i64::from(rhs),
+        }
+    }
+}
+
+impl Mul<Duration> for i32 {
+    type Output = Duration;
+
+    fn mul(self, rhs: Duration) -> Self::Output {
+        Duration {
+            nanoseconds: i64::from(self) * rhs.nanoseconds,
+        }
+    }
+}
+
+impl Div<i32> for Duration {
+    type Output = Duration;
+
+    fn div(self, rhs: i32) -> Self::Output {
+        Duration {
+            nanoseconds: self.nanoseconds / i64::from(rhs),
+        }
+    }
+}
+
 impl Mul<f32> for Duration {
     type Output = Duration;
 
@@ -207,17 +237,6 @@ impl Div<f32> for Duration {
         #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
         Duration {
             nanoseconds: ((self.nanoseconds as f32) / rhs) as i64,
-        }
-    }
-}
-
-impl Div<Duration> for f32 {
-    type Output = Duration;
-
-    fn div(self, rhs: Duration) -> Self::Output {
-        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-        Duration {
-            nanoseconds: (self / (rhs.nanoseconds as f32)) as i64,
         }
     }
 }

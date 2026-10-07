@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import QtQuick.VirtualKeyboard
 
 import engineering.fizzy.deck_application
 
@@ -199,6 +200,52 @@ ApplicationWindow {
 
         SourceSelect {
             engine: root.engine
+        }
+    }
+
+    InputPanel {
+        id: inputPanel
+        z: 99
+        x: (root.width / 2) - (inputPanel.width / 2)
+        y: root.height
+        width: root.width / 3
+
+        states: State {
+            name: "visible"
+            when: inputPanel.active
+
+            PropertyChanges {
+                target: inputPanel
+                y: root.height - inputPanel.height
+            }
+        }
+
+        transitions: Transition {
+            from: ""
+            to: "visible"
+            reversible: true
+
+            ParallelAnimation {
+                NumberAnimation {
+                    properties: "y"
+                    duration: 0
+                    easing.type: Easing.InOutQuad
+                }
+            }
+        }
+    }
+
+    Connections {
+        target: Qt.inputMethod
+
+        function onVisibleChanged() {
+            if (Qt.inputMethod.visible) {
+                return;
+            }
+
+            let item = root.activeFocusItem;
+
+            item.focus = false;
         }
     }
 }

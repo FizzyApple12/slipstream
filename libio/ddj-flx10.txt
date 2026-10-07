@@ -97,10 +97,10 @@
 0xBn29->j():PlayerJogSearchVelocitySet
 0xBn1F->j():PlayerJogSearchVelocitySet
 
-0x9n36->b(0x7F):PlayerJogPress
-0x9n67->b(0x7F):PlayerJogPress
-0x9n36->b(0x00):PlayerJogRelease
-0x9n67->b(0x00):PlayerJogRelease
+0x9n36->b(0x7F):PlayerJogTouchPress
+0x9n67->b(0x7F):PlayerJogTouchPress
+0x9n36->b(0x00):PlayerJogTouchRelease
+0x9n67->b(0x00):PlayerJogTouchRelease
 
 0x9n35->b(0x7F):PlayerQuantizePress
 0x9n40->b(0x7F):PlayerSlipPress
@@ -139,7 +139,7 @@
 0x9n4C->b(0x7F):PlayerBeatLoopInAdjustPress
 0x9n11->b(0x7F):PlayerBeatLoopOutPress
 0x9n4D->b(0x7F):PlayerBeatLoopOutAdjustPress
-0x9n14->b(0x7F):PlayerReLoopPress
+0x9n14->b(0x7F):PlayerBeatLoopExitPress
 0x9n50->b(0x7F):PlayerInstantLoopPress
 
 # Pad

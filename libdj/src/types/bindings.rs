@@ -96,6 +96,7 @@ pub enum DeckControlEvent {
     PlayerBeatLoopInAdjustPress { channel: usize },
     PlayerBeatLoopOutPress { channel: usize },
     PlayerBeatLoopOutAdjustPress { channel: usize },
+    PlayerBeatLoopExitPress { channel: usize },
     PlayerReLoopPress { channel: usize },
     PlayerInstantLoopPress { channel: usize },
 

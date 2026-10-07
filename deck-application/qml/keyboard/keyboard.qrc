@@ -1,0 +1,6 @@
+<RCC>
+  	<qresource prefix="/qt/qml/QtQuick/VirtualKeyboard/Styles/slipstream">
+    	<file alias="style.qml">style.qml</file>
+    	<file alias="qmldir">qmldir</file>
+  	</qresource>
+</RCC>

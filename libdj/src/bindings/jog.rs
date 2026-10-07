@@ -12,6 +12,8 @@ pub fn player_jog_release(deck_state: &mut DeckState, channel: usize) {
 
         if !(-f32::EPSILON..=f32::EPSILON).contains(&channel.player.jog_velocity) {
             channel.player.jog_wait = true;
+        } else if channel.player.slip_playing {
+            channel.player.time = channel.player.slip_time;
         }
     }
 }

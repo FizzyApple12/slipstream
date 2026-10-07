@@ -1,7 +1,11 @@
 use timecode::{Duration, Timecode};
 
-use crate::types::deck::{
-    BeatSyncMode, CrossFaderSide, DeckState, MasterFXChannel, PlayState, TempoRange,
+use crate::{
+    MIN_LOOP_SIZE_NANOSECONDS,
+    types::deck::{
+        BeatLoopAdjustMode, BeatSyncMode, CrossFaderSide, DeckState, MasterFXChannel, PlayState,
+        TempoRange,
+    },
 };
 
 pub fn mixer_master_cue_press(deck_state: &mut DeckState) {
@@ -63,9 +67,31 @@ pub fn player_play_press(deck_state: &mut DeckState, channel: usize) {
         let play_direction = &mut channel.player.play_state;
 
         match play_direction {
-            PlayState::Cue | PlayState::Stop => *play_direction = PlayState::Play,
+            PlayState::Cue | PlayState::Stop => {
+                if channel.player.slip_playing {
+                    channel.player.time = channel.player.slip_time;
+                }
+
+                *play_direction = PlayState::Play;
+            }
             PlayState::Play => *play_direction = PlayState::Stop,
         }
+    }
+}
+
+pub fn player_reverse_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        channel.player.reverse_enabled = true;
+    }
+}
+
+pub fn player_reverse_release(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        if channel.player.slip_playing {
+            channel.player.time = channel.player.slip_time;
+        }
+
+        channel.player.reverse_enabled = false;
     }
 }
 
@@ -224,5 +250,106 @@ pub fn player_tempo_range_press(deck_state: &mut DeckState, channel: usize) {
 pub fn player_master_tempo_press(deck_state: &mut DeckState, channel: usize) {
     if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
         channel.player.master_tempo = !channel.player.master_tempo;
+    }
+}
+
+pub fn player_beat_loop_in_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        if let Some(loop_start) = channel.player.beat_loop_start
+            && let Some(loop_end) = channel.player.beat_loop_end
+        {
+            if (loop_end.nanoseconds - loop_start.nanoseconds) > MIN_LOOP_SIZE_NANOSECONDS {
+                let new_end = loop_start + ((loop_end - loop_start) / 2);
+
+                channel.player.beat_loop_end = Some(new_end);
+            }
+        } else {
+            let loop_start_time = if channel.player.quanitze {
+                channel
+                    .player
+                    .get_closest_beat()
+                    .map_or(channel.player.time, |beat| beat.time)
+            } else {
+                channel.player.time
+            };
+
+            channel.player.beat_loop_start = Some(loop_start_time);
+        }
+    }
+}
+
+pub fn player_beat_loop_in_adjust_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        if channel.player.beat_loop_adjust_mode == BeatLoopAdjustMode::In {
+            channel.player.beat_loop_adjust_mode = BeatLoopAdjustMode::None;
+        } else {
+            channel.player.beat_loop_adjust_mode = BeatLoopAdjustMode::In;
+        }
+    }
+}
+
+pub fn player_beat_loop_out_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        if let Some(loop_start) = channel.player.beat_loop_start
+            && let Some(loop_end) = channel.player.beat_loop_end
+        {
+            let new_end = loop_start + ((loop_end - loop_start) * 2);
+
+            channel.player.beat_loop_end = Some(new_end);
+        } else {
+            let loop_end_time = if channel.player.quanitze {
+                channel
+                    .player
+                    .get_closest_beat()
+                    .map_or(channel.player.time, |beat| beat.time)
+            } else {
+                channel.player.time
+            };
+
+            channel.player.beat_loop_end = Some(loop_end_time);
+        }
+    }
+}
+
+pub fn player_beat_loop_out_adjust_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        if channel.player.beat_loop_adjust_mode == BeatLoopAdjustMode::Out {
+            channel.player.beat_loop_adjust_mode = BeatLoopAdjustMode::None;
+        } else {
+            channel.player.beat_loop_adjust_mode = BeatLoopAdjustMode::Out;
+        }
+    }
+}
+
+pub fn player_beat_loop_exit_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel)
+        && channel.player.beat_loop_start.is_some()
+        && channel.player.beat_loop_end.is_some()
+    {
+        channel.player.beat_loop_end = None;
+    }
+}
+
+pub fn player_re_loop_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel)
+        && let Some((last_loop_start, last_loop_end)) = channel.player.last_beat_loop
+    {
+        channel.player.beat_loop_start = Some(last_loop_start);
+        channel.player.beat_loop_end = Some(last_loop_end);
+
+        channel.player.time = last_loop_start;
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn player_instant_loop_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel)
+        && let Some(bpm) = channel.player.get_current_source_bpm()
+    {
+        let length = (60_000_000_000.0 / bpm).floor() as i64 * 4;
+
+        channel.player.beat_loop_start = Some(channel.player.time);
+        channel.player.beat_loop_end =
+            Some(channel.player.time + Duration::from_nanoseconds(length));
     }
 }

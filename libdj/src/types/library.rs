@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::PathBufAsString;
+use crate::{PathBufAsString, math::harmonics::Key};
 
 #[derive(Debug, Clone, Copy, Archive, Deserialize, Serialize)]
 pub enum OriginDatabase {
@@ -15,7 +15,6 @@ pub type LabelID = u32;
 pub type AlbumID = u32;
 pub type TrackID = u32;
 pub type GenreID = u32;
-pub type KeyID = u32;
 pub type PlaylistTreeNodeID = u32;
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
@@ -25,7 +24,6 @@ pub struct Library {
     pub artworks: BTreeMap<ArtworkID, Artwork>,
     pub genres: BTreeMap<GenreID, Genre>,
     pub labels: BTreeMap<LabelID, Label>,
-    pub keys: BTreeMap<KeyID, Key>,
 
     pub tracks: BTreeMap<TrackID, Track>,
 
@@ -62,14 +60,6 @@ pub struct Artwork {
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 pub struct Genre {
     pub id: GenreID,
-    pub name: String,
-
-    pub origin: OriginDatabase,
-}
-
-#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
-pub struct Key {
-    pub id: KeyID,
     pub name: String,
 
     pub origin: OriginDatabase,
@@ -139,7 +129,7 @@ pub struct Track {
     pub album_id: AlbumID,
     pub genre_id: GenreID,
     pub artwork_id: ArtworkID,
-    pub key_id: KeyID,
+    pub key: Key,
 
     #[rkyv(with = PathBufAsString)]
     pub audio_path: PathBuf,

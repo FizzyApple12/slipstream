@@ -1,6 +1,7 @@
 #![feature(unboxed_closures)]
 #![feature(nonpoison_rwlock)]
 #![feature(sync_nonpoison)]
+#![feature(slice_shift)]
 
 pub mod engine;
 
@@ -27,6 +28,8 @@ pub mod types;
 const JOG_DEADBAND: f32 = 0.75;
 const KNOB_DEADBAND: f32 = 0.001;
 
+const MIN_LOOP_SIZE_NANOSECONDS: i64 = 1_000_000;
+
 pub const MIXER_CHANNELS: usize = 4;
 pub const AUDIO_CHANNELS: usize = 2;
 
@@ -35,23 +38,19 @@ pub const BASE_GAIN_DB: f32 = -14.0;
 pub const MIXER_MIN_FREQUENCY: f32 = 0.0;
 pub const MIXER_MAX_FREQUENCY: f32 = 22000.0;
 
-// pub const MIXER_EQ_LOW_CUTOFF: f32 = 880.0;
-// pub const MIXER_EQ_LOW_CUTOFF: f32 = 250.0;
-pub const MIXER_EQ_LOW_CUTOFF: f64 = 100.0;
+pub const MIXER_EQ_LOW_CUTOFF: f64 = 500.0;
 pub const MIXER_EQ_LOW_OCTAVES: f64 = 2.0;
 
-// pub const MIXER_EQ_MID_CENTER: f32 = 2000.0;
-// pub const MIXER_EQ_MID_CENTER: f32 = 1000.0;
 pub const MIXER_EQ_MID_CENTER: f64 = 1000.0;
 pub const MIXER_EQ_MID_Q: f64 = 0.7;
 
-// pub const MIXER_EQ_HIGH_CUTOFF: f32 = 5000.0;
-// pub const MIXER_EQ_HIGH_CUTOFF: f32 = 3000.0;
-pub const MIXER_EQ_HIGH_CUTOFF: f64 = 10000.0;
+pub const MIXER_EQ_HIGH_CUTOFF: f64 = 5000.0;
 pub const MIXER_EQ_HIGH_OCTAVES: f64 = 1.899_968_626_952_991_6;
 
 pub const MIXER_FILTER_LOW_PASS_OCTAVES: f64 = 1.899_968_626_952_991_6;
 pub const MIXER_FILTER_HIGH_PASS_OCTAVES: f64 = 1.899_968_626_952_991_6;
+
+pub const MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH: usize = 128;
 
 pub struct PathBufAsString;
 

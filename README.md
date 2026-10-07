@@ -3,13 +3,7 @@
 https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/exports.html
 https://djl-analysis.deepsymmetry.org/djl-analysis/packets.html
 
-consider pruning:
-* godot-ui
-* godot-ui-code
-* libui
-
 rc1 todos:
-* control quantize system
 * usb-stored settings system
 * finish button bindings
 * rearchitect the audio pipeline

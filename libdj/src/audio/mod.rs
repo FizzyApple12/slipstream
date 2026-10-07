@@ -15,7 +15,7 @@ use thiserror::Error;
 use timecode::{Duration, Timecode};
 
 use crate::{
-    AUDIO_CHANNELS,
+    AUDIO_CHANNELS, MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH,
     audio::dsp_pipeline::deck::DeckDSP,
     types::{
         bindings::{DeckControlEvent, UIControlEvent},
@@ -174,6 +174,7 @@ impl AudioSystem {
         Ok(valid_devices.next().or(None))
     }
 
+    #[allow(clippy::cast_precision_loss)]
     pub fn create_full_audio_pipeline(
         &mut self,
         channels: Arc<RwLock<AudioSystemChannels>>,
@@ -282,8 +283,6 @@ impl AudioSystem {
 
                     *last_process_timecode = current_timecode;
 
-                    let _ = deck_state_sender.send_replace(deck_state.clone());
-
                     deck_dsp.generate_samples(
                         deck_state,
                         &update_results,
@@ -291,6 +290,23 @@ impl AudioSystem {
                         cue_output_buffers,
                         available_samples,
                     );
+
+                    for (state_channels, dsp_channels) in
+                        deck_state.mixer_channels.iter_mut().zip(&deck_dsp.channels)
+                    {
+                        for (state_channel, dsp_channel) in state_channels
+                            .average_amplitude
+                            .iter_mut()
+                            .zip(&dsp_channels.amplitude_history)
+                        {
+                            *state_channel = dsp_channel
+                                .iter()
+                                .fold(0.0, |accumulator, sample| accumulator + sample)
+                                / MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH as f32;
+                        }
+                    }
+
+                    let _ = deck_state_sender.send_replace(deck_state.clone());
 
                     // we need max performance here
                     #[allow(clippy::indexing_slicing)]

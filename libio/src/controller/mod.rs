@@ -4,6 +4,7 @@ use libdj::types::{
     bindings::DeckControlEvent,
     deck::{BeatLoopAdjustMode, BeatSyncMode, DeckState, PlayState},
 };
+use libdsp::amplitude_to_db;
 use loop_unwrap::{ToOption, unwrap_continue};
 use midir::{MidiInput, MidiInputConnection, MidiOutput};
 use thiserror::Error;
@@ -174,10 +175,12 @@ impl Controller {
                                 ControllerMessage::UpdateCurrentSamples(samples) => {
                                     for (deck, sample) in samples.into_iter().enumerate() {
                                         #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-                                        let sample = f32::min(f32::abs(sample) * 127.0, 127.0) as u8;
+                                        let db_amplitude = f32::min(amplitude_to_db(sample) * 127.0, 127.0) as u8;
+
+                                        // log::warn!("{deck} : {}", amplitude_to_db(f32::abs(sample)));
 
                                         #[allow(clippy::cast_possible_truncation)]
-                                        let _ = midi_sender.send(addr_channel_value_to_midi(0xB002, deck as u16, sample));
+                                        let _ = midi_sender.send(addr_channel_value_to_midi(0xB002, deck as u16, db_amplitude));
                                     }
                                 },
                             }
@@ -743,6 +746,7 @@ fn apply_mapping_to_event(
         | DeckControlEvent::PlayerBeatLoopInAdjustPress { channel }
         | DeckControlEvent::PlayerBeatLoopOutPress { channel }
         | DeckControlEvent::PlayerBeatLoopOutAdjustPress { channel }
+        | DeckControlEvent::PlayerBeatLoopExitPress { channel }
         | DeckControlEvent::PlayerReLoopPress { channel }
         | DeckControlEvent::PlayerInstantLoopPress { channel }
         | DeckControlEvent::MixerChannelMasterFXTargetPress { channel } => {
@@ -997,7 +1001,7 @@ fn set_deck_leds(
             }
             (Some(_), None) => {
                 // in
-                let in_state = if flash_timers.fast { 127 } else { 0 };
+                let in_state = if flash_timers.mid { 127 } else { 0 };
                 let _ =
                     midi_output.send(addr_channel_value_to_midi(0x9010, channel as u16, in_state));
                 let _ =
@@ -1021,7 +1025,7 @@ fn set_deck_leds(
                 let _ = midi_output.send(addr_channel_value_to_midi(0x904C, channel as u16, 127));
 
                 // out
-                let out_state = if flash_timers.fast { 127 } else { 0 };
+                let out_state = if flash_timers.mid { 127 } else { 0 };
                 let _ = midi_output.send(addr_channel_value_to_midi(
                     0x9011,
                     channel as u16,
@@ -1166,7 +1170,7 @@ fn set_deck_leds(
         // }
 
         // time
-        // let track_time_seconds = player_state.time.to_nanoseconds() /
+        // let track_time_seconds = player_state.time.nanoseconds /
         // 1_000_000_000; let track_time_minutes = (track_time_seconds /
         // 60).unsigned_abs() as u8; let track_time_seconds =
         // (track_time_seconds % 60).unsigned_abs() as u8;

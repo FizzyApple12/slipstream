@@ -1,4 +1,3 @@
-use log::info;
 use timecode::Timecode;
 
 use crate::{

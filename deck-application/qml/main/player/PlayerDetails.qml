@@ -541,7 +541,7 @@ Rectangle {
 
                             color: palette.text
 
-                            text: "--"
+                            text: root.engine.deck_state.mixer_channel(root.player_number).player.current_key
                         }
                     }
                 }

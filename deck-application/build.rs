@@ -49,6 +49,7 @@ fn main() {
         .qrc("qml/fonts/fonts.qrc")
         .qrc("qml/shaders/shaders.qrc")
         .qrc("qml/icons/icons.qrc")
+        .qrc("qml/keyboard/keyboard.qrc")
         .qrc("qml/test_images/test_images.qrc")
         .include_dir("include/")
         .files(vec![
@@ -59,6 +60,7 @@ fn main() {
         .qt_module("Network")
         .qt_module("QuickLayouts")
         .qt_module("Svg")
+        .qt_module("VirtualKeyboard")
         .cc_builder(|cc| {
             // cc.define("QT_QML_DEBUG", None);
 

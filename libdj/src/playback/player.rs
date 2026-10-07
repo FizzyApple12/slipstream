@@ -1,7 +1,7 @@
 use timecode::{Duration, Timecode};
 
 use crate::{
-    JOG_DEADBAND,
+    JOG_DEADBAND, MIN_LOOP_SIZE_NANOSECONDS,
     math::{
         beats::{closest_bpm_multiple, get_closest_beat_index, get_current_beat_index},
         jog::JogRPM,
@@ -16,7 +16,7 @@ pub struct PlayerUpdateResults {
     pub playback_frame_start_time: Timecode,
     pub playback_frame_end_time: Timecode,
 
-    pub playback_wrap_times: Option<(Timecode, Timecode)>,
+    pub playback_wrap_times: Option<(Timecode, Timecode, usize)>,
 
     pub touch_cue_playback_times: Option<(Timecode, Timecode)>,
 }
@@ -40,6 +40,10 @@ impl PlayerState {
 
         if self.jog_wait && (-f32::EPSILON..=f32::EPSILON).contains(&self.jog_velocity) {
             self.jog_wait = false;
+
+            if self.slip_playing {
+                self.time = self.slip_time;
+            }
         }
     }
 
@@ -126,18 +130,74 @@ impl PlayerState {
 
         // calculate track movement
 
-        match (self.play_state, self.jog_hold || self.jog_wait) {
-            (PlayState::Stop, _) => {
-                let jog_time = self.jog_velocity.jog_time_offset(delta_time);
+        let (jog_being_held, jog_affecting_playback) = match self.beat_loop_adjust_mode {
+            BeatLoopAdjustMode::In => {
+                if let Some(loop_start) = &mut self.beat_loop_start
+                    && let Some(loop_end) = &self.beat_loop_end
+                {
+                    let jog_time = self.jog_velocity.jog_time_offset(delta_time);
 
-                self.time += jog_time;
+                    if jog_time.nanoseconds > 0 {
+                        if (loop_end.nanoseconds - loop_start.nanoseconds)
+                            > MIN_LOOP_SIZE_NANOSECONDS
+                        {
+                            *loop_start += jog_time;
+                        }
+
+                        if loop_end.nanoseconds < loop_start.nanoseconds {
+                            loop_start.nanoseconds =
+                                loop_end.nanoseconds - MIN_LOOP_SIZE_NANOSECONDS;
+                        }
+                    } else {
+                        *loop_start += jog_time;
+                    }
+                }
+
+                (false, false)
+            }
+            BeatLoopAdjustMode::Out => {
+                if let Some(loop_start) = &self.beat_loop_start
+                    && let Some(loop_end) = &mut self.beat_loop_end
+                {
+                    let jog_time = self.jog_velocity.jog_time_offset(delta_time);
+
+                    if jog_time.nanoseconds < 0 {
+                        if (loop_end.nanoseconds - loop_start.nanoseconds)
+                            > MIN_LOOP_SIZE_NANOSECONDS
+                        {
+                            *loop_end += jog_time;
+                        }
+
+                        if loop_start.nanoseconds > loop_end.nanoseconds {
+                            loop_end.nanoseconds =
+                                loop_start.nanoseconds + MIN_LOOP_SIZE_NANOSECONDS;
+                        }
+                    } else {
+                        *loop_end += jog_time;
+                    }
+                }
+
+                (false, false)
+            }
+            BeatLoopAdjustMode::None => (self.jog_hold || self.jog_wait, true),
+        };
+
+        match (self.play_state, jog_being_held) {
+            (PlayState::Stop, _) => {
+                if jog_affecting_playback {
+                    let jog_time = self.jog_velocity.jog_time_offset(delta_time);
+
+                    self.time += jog_time;
+                }
             }
             (PlayState::Play, true) => {
                 self.slip_playing = self.slip;
 
-                let jog_time = self.jog_velocity.jog_time_offset(delta_time);
+                if jog_affecting_playback {
+                    let jog_time = self.jog_velocity.jog_time_offset(delta_time);
 
-                self.time += jog_time;
+                    self.time += jog_time;
+                }
             }
             (PlayState::Play, false) => {
                 if self.beat_sync == BeatSyncMode::BeatSync
@@ -146,7 +206,11 @@ impl PlayerState {
                     self.beat_sync = BeatSyncMode::BPMSync;
                 }
 
-                let pitch_time = self.jog_velocity.pitch_bend_time_offset(delta_time);
+                let pitch_time = if jog_affecting_playback {
+                    self.jog_velocity.pitch_bend_time_offset(delta_time)
+                } else {
+                    Duration { nanoseconds: 0 }
+                };
 
                 self.slip_playing = self.slip;
 
@@ -175,18 +239,24 @@ impl PlayerState {
             (PlayState::Cue, true) => {
                 self.slip_playing = false;
 
-                let jog_time = self.jog_velocity.jog_time_offset(delta_time);
+                if jog_affecting_playback {
+                    let jog_time = self.jog_velocity.jog_time_offset(delta_time);
 
-                self.time += jog_time;
+                    self.time += jog_time;
+                }
             }
             (PlayState::Cue, false) => {
-                if self.beat_sync == BeatSyncMode::BeatSync
-                    && !(-f32::EPSILON..=f32::EPSILON).contains(&self.jog_velocity)
-                {
-                    self.beat_sync = BeatSyncMode::BPMSync;
-                }
+                let pitch_time = if jog_affecting_playback {
+                    if self.beat_sync == BeatSyncMode::BeatSync
+                        && !(-f32::EPSILON..=f32::EPSILON).contains(&self.jog_velocity)
+                    {
+                        self.beat_sync = BeatSyncMode::BPMSync;
+                    }
 
-                let pitch_time = self.jog_velocity.pitch_bend_time_offset(delta_time);
+                    self.jog_velocity.pitch_bend_time_offset(delta_time)
+                } else {
+                    Duration { nanoseconds: 0 }
+                };
 
                 self.slip_playing = false;
 
@@ -217,11 +287,7 @@ impl PlayerState {
         // calculate track slip movement
 
         if self.slip_playing {
-            match (
-                self.play_state,
-                self.jog_hold || self.jog_wait,
-                self.reverse_enabled,
-            ) {
+            match (self.play_state, jog_being_held, self.reverse_enabled) {
                 (PlayState::Stop, _, _) | (_, true, _) | (_, _, true) => {
                     if self.beat_sync == BeatSyncMode::BeatSync
                         && let Some(ref track_analysis) = self.current_track_analysis
@@ -258,19 +324,34 @@ impl PlayerState {
         if let Some(beat_loop_start) = self.beat_loop_start
             && let Some(beat_loop_end) = self.beat_loop_end
         {
-            while self.time < beat_loop_start {
-                self.time += beat_loop_end - beat_loop_start;
+            if self.time > beat_loop_end {
+                let wrap_count: usize =
+                    usize::try_from(self.time.nanoseconds - beat_loop_start.nanoseconds)
+                        .unwrap_or(0)
+                        / usize::try_from(beat_loop_end.nanoseconds - beat_loop_start.nanoseconds)
+                            .unwrap_or(1);
+
+                self.time.nanoseconds = beat_loop_start.nanoseconds
+                    + ((self.time.nanoseconds - beat_loop_start.nanoseconds)
+                        % (beat_loop_end.nanoseconds - beat_loop_start.nanoseconds));
 
                 if playback_wrap_times.is_none() {
-                    playback_wrap_times = Some((beat_loop_start, beat_loop_end));
+                    playback_wrap_times = Some((beat_loop_end, beat_loop_start, wrap_count));
                 }
             }
 
-            while self.time > beat_loop_end {
-                self.time -= beat_loop_end - beat_loop_start;
+            if self.time < beat_loop_start {
+                let wrap_count: usize =
+                    usize::try_from(beat_loop_end.nanoseconds - self.time.nanoseconds).unwrap_or(0)
+                        / usize::try_from(beat_loop_end.nanoseconds - beat_loop_start.nanoseconds)
+                            .unwrap_or(1);
+
+                self.time.nanoseconds = beat_loop_end.nanoseconds
+                    + ((self.time.nanoseconds - beat_loop_end.nanoseconds)
+                        % (beat_loop_end.nanoseconds - beat_loop_start.nanoseconds));
 
                 if playback_wrap_times.is_none() {
-                    playback_wrap_times = Some((beat_loop_end, beat_loop_start));
+                    playback_wrap_times = Some((beat_loop_start, beat_loop_end, wrap_count));
                 }
             }
         }

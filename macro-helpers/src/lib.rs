@@ -68,7 +68,11 @@ pub fn make_enum_str_converters(input: TokenStream) -> TokenStream {
             pub fn from_str(string: &str) -> ::core::option::Option<#enum_name> {
                 match string {
                     #(#from_str_arms),*
-                     _ => ::core::option::Option::None
+                    action => {
+                        log::warn!("Unknown Action: {action}");
+
+                        ::core::option::Option::None
+                    }
                 }
             }
         }

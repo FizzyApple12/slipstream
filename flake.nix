@@ -44,6 +44,7 @@
               qtwayland
               qtshadertools
               qtsvg
+              qtvirtualkeyboard
             ];
           in pkgs.mkShell rec {
           buildInputs = [

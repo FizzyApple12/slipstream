@@ -1,17 +1,21 @@
 use std::{
+    collections::BTreeMap,
     fs::File,
     path::{Path, PathBuf},
 };
 
 use binrw::BinRead;
-use libdj::types::{
-    analysis::{
-        Beat, CueType, HotCue, MemoryCue, PreviewWaveformColumn, TrackAnalysis, WaveformColumn,
-        WaveformType,
-    },
-    library::{
-        Album, Artist, Artwork, Genre, Key, Label, Library, OriginDatabase, Playlist,
-        PlaylistFolder, PlaylistTreeNode, Track,
+use libdj::{
+    math::harmonics::Key,
+    types::{
+        analysis::{
+            Beat, CueType, HotCue, MemoryCue, PreviewWaveformColumn, TrackAnalysis, WaveformColumn,
+            WaveformType,
+        },
+        library::{
+            Album, Artist, Artwork, Genre, Label, Library, OriginDatabase, Playlist,
+            PlaylistFolder, PlaylistTreeNode, Track,
+        },
     },
 };
 use log::{debug, info, warn};
@@ -83,6 +87,47 @@ impl RekordboxDatabase {
         self: &mut RekordboxDatabase,
         existing_library: &mut Library,
     ) -> Result<(), LoadBaseError> {
+        // we need to pre-cache musical keys because rekordbox stores them as logical
+        // IDs pointing to a table
+        let mut key_cache = BTreeMap::<u32, Key>::new();
+
+        for table in &self.pdb_header.tables {
+            let Ok(pages) = self.pdb_header.read_pages(
+                &mut self.pdb_file,
+                binrw::Endian::NATIVE,
+                (&table.first_page, &table.last_page, DatabaseType::Plain),
+            ) else {
+                continue;
+            };
+
+            for page in pages {
+                if let rekordcrate::pdb::PageContent::Data(data_page_content) = page.content {
+                    for row_group in data_page_content.rows {
+                        match row_group.1 {
+                            rekordcrate::pdb::Row::Plain(plain_row) => {
+                                if let rekordcrate::pdb::PlainRow::Key(key_entry) = plain_row {
+                                    debug!(target: "libdatabase::database::rekordbox", "{key_entry:?}");
+
+                                    let Some(key) = Key::try_from(&key_entry.name.to_string())
+                                    else {
+                                        warn!(
+                                            "Database has unknown musical key: {}",
+                                            key_entry.name
+                                        );
+
+                                        continue;
+                                    };
+
+                                    key_cache.insert(key_entry.id.0, key);
+                                }
+                            }
+                            rekordcrate::pdb::Row::Ext(_) | rekordcrate::pdb::Row::Unknown => {}
+                        }
+                    }
+                }
+            }
+        }
+
         for table in &self.pdb_header.tables {
             let Ok(pages) = self.pdb_header.read_pages(
                 &mut self.pdb_file,
@@ -112,19 +157,6 @@ impl RekordboxDatabase {
                                             },
                                         );
                                     }
-                                    rekordcrate::pdb::PlainRow::Key(key) => {
-                                        debug!(target: "libdatabase::database::rekordbox", "{key:?}");
-
-                                        existing_library.keys.insert(
-                                            key.id.0,
-                                            Key {
-                                                id: key.id.0,
-                                                name: key.name.to_string(),
-
-                                                origin: OriginDatabase::Rekordbox,
-                                            },
-                                        );
-                                    }
                                     rekordcrate::pdb::PlainRow::Artist(artist) => {
                                         debug!(target: "libdatabase::database::rekordbox", "{artist:?}");
 
@@ -146,9 +178,9 @@ impl RekordboxDatabase {
                                             Artwork {
                                                 id: artwork.id.0,
                                                 path: self.device_root.join(PathBuf::from(
-                                                    relativeify_path_string(
+                                                    strip_path_string(&relativeify_path_string(
                                                         artwork.path.to_string(),
-                                                    ),
+                                                    )),
                                                 )),
 
                                                 origin: OriginDatabase::Rekordbox,
@@ -285,18 +317,21 @@ impl RekordboxDatabase {
                                                 album_id: track.album_id.0,
                                                 genre_id: track.genre_id.0,
                                                 artwork_id: track.artwork_id.0,
-                                                key_id: track.key_id.0,
+                                                key: key_cache
+                                                    .get(&track.key_id.0)
+                                                    .copied()
+                                                    .unwrap_or(Key::from_semitones(0)),
 
                                                 audio_path: self.device_root.join(
-                                                    relativeify_path_string(
+                                                    strip_path_string(&relativeify_path_string(
                                                         track.offsets.file_path.to_string(),
-                                                    ),
+                                                    )),
                                                 ),
 
                                                 analysis_path: self.device_root.join(
-                                                    relativeify_path_string(
+                                                    strip_path_string(&relativeify_path_string(
                                                         track.offsets.analyze_path.to_string(),
-                                                    ),
+                                                    )),
                                                 ),
                                             },
                                         );
@@ -672,4 +707,8 @@ impl RekordboxDatabase {
 
         info!(target: "libdatabase::database::rekordbox", "Rekordbox database closed");
     }
+}
+
+pub fn strip_path_string(path: &str) -> String {
+    path.replace(|c: char| !c.is_ascii(), "?")
 }

@@ -1,18 +1,20 @@
 use std::f32;
 
 use libdsp::{
+    amplitude_to_db,
     audio_loader::TrackAudioData,
     dsp::filters::{BiquadDesign, BiquadStatic},
 };
 
 use crate::{
-    AUDIO_CHANNELS, MIXER_EQ_HIGH_CUTOFF, MIXER_EQ_HIGH_OCTAVES, MIXER_EQ_LOW_CUTOFF,
-    MIXER_EQ_LOW_OCTAVES, MIXER_EQ_MID_CENTER, MIXER_EQ_MID_Q, MIXER_FILTER_HIGH_PASS_OCTAVES,
-    MIXER_FILTER_LOW_PASS_OCTAVES, audio::dsp_pipeline::player::PlayerDSP,
-    math::fader::SingleFader, playback::channel::ChannelUpdateResults, types::deck::ChannelState,
+    AUDIO_CHANNELS, MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH, MIXER_EQ_HIGH_CUTOFF,
+    MIXER_EQ_HIGH_OCTAVES, MIXER_EQ_LOW_CUTOFF, MIXER_EQ_LOW_OCTAVES, MIXER_EQ_MID_CENTER,
+    MIXER_EQ_MID_Q, MIXER_FILTER_HIGH_PASS_OCTAVES, MIXER_FILTER_LOW_PASS_OCTAVES,
+    audio::dsp_pipeline::player::PlayerDSP, math::fader::SingleFader,
+    playback::channel::ChannelUpdateResults, types::deck::ChannelState,
 };
 
-// const BASICALLY_INFINITY: f32 = 100.0;
+const BASICALLY_INFINITY: f32 = 26.0;
 
 // i disagree!
 #[allow(clippy::type_complexity)]
@@ -20,6 +22,8 @@ pub struct ChannelDSP {
     target_sample_rate: u32,
 
     player: PlayerDSP,
+
+    pub amplitude_history: [[f32; MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH]; AUDIO_CHANNELS],
 
     eq_low_coefficient: f32,
     eq_mid_coefficient: f32,
@@ -55,6 +59,8 @@ impl ChannelDSP {
             target_sample_rate: sample_rate,
 
             player: PlayerDSP::new(sample_rate),
+
+            amplitude_history: [[0.0; MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH]; AUDIO_CHANNELS],
 
             eq_low_coefficient: 0.0,
             eq_mid_coefficient: 0.0,
@@ -127,7 +133,11 @@ impl ChannelDSP {
 
         self.update_filters();
 
-        for (buffer_index, master_output_buffer) in master_output_buffers.iter_mut().enumerate() {
+        for (buffer_index, (master_output_buffer, amplitude_history)) in master_output_buffers
+            .iter_mut()
+            .zip(&mut self.amplitude_history)
+            .enumerate()
+        {
             for (sample_number, sample) in master_output_buffer.iter_mut().enumerate() {
                 let root_sample = self.master_output_buffers[buffer_index][sample_number];
 
@@ -146,6 +156,8 @@ impl ChannelDSP {
                 } else {
                     high_filtered
                 };
+
+                amplitude_history.shift_left([final_filtered.abs()]);
 
                 *sample = final_filtered.fade(channel_state.fade);
                 // *sample = low_filtered.fade(channel_state.fade);
@@ -209,62 +221,62 @@ impl ChannelDSP {
     #[allow(clippy::indexing_slicing)]
     fn update_filters(&mut self) {
         for buffer_index in 0..AUDIO_CHANNELS {
-            // self.master_eq_filters.0[buffer_index].low_shelf_db(
-            //     MIXER_EQ_LOW_CUTOFF / f64::from(self.target_sample_rate),
-            //     f64::from(amplitude_to_db(self.eq_coefficients.0 +
-            // 1.0).max(-BASICALLY_INFINITY)),     MIXER_EQ_LOW_OCTAVES,
-            //     BiquadDesign::OneSided,
-            // );
-            // self.master_eq_filters.1[buffer_index].peak_db_q(
-            //     MIXER_EQ_MID_CENTER / f64::from(self.target_sample_rate),
-            //     f64::from(amplitude_to_db(self.eq_coefficients.1 +
-            // 1.0).max(-BASICALLY_INFINITY)),     MIXER_EQ_MID_Q,
-            //     BiquadDesign::Cookbook,
-            // );
-            // self.master_eq_filters.2[buffer_index].high_shelf_db(
-            //     MIXER_EQ_HIGH_CUTOFF / f64::from(self.target_sample_rate),
-            //     f64::from(amplitude_to_db(self.eq_coefficients.2 +
-            // 1.0).max(-BASICALLY_INFINITY)),     MIXER_EQ_HIGH_OCTAVES,
-            //     BiquadDesign::OneSided,
-            // );
-
-            self.master_eq_filters.0[buffer_index].low_shelf(
+            self.master_eq_filters.0[buffer_index].low_shelf_db(
                 MIXER_EQ_LOW_CUTOFF / f64::from(self.target_sample_rate),
-                f64::from(self.eq_low_coefficient + 1.0),
+                f64::from(amplitude_to_db(self.eq_low_coefficient + 1.0).max(-BASICALLY_INFINITY)),
                 MIXER_EQ_LOW_OCTAVES,
                 BiquadDesign::OneSided,
             );
-            self.master_eq_filters.1[buffer_index].peak_q(
+            self.master_eq_filters.1[buffer_index].peak_db_q(
                 MIXER_EQ_MID_CENTER / f64::from(self.target_sample_rate),
-                f64::from(self.eq_mid_coefficient + 1.0),
+                f64::from(amplitude_to_db(self.eq_mid_coefficient + 1.0).max(-BASICALLY_INFINITY)),
                 MIXER_EQ_MID_Q,
                 BiquadDesign::Cookbook,
             );
-            self.master_eq_filters.2[buffer_index].high_shelf(
+            self.master_eq_filters.2[buffer_index].high_shelf_db(
                 MIXER_EQ_HIGH_CUTOFF / f64::from(self.target_sample_rate),
-                f64::from(self.eq_high_coefficient + 1.0),
+                f64::from(amplitude_to_db(self.eq_high_coefficient + 1.0).max(-BASICALLY_INFINITY)),
                 MIXER_EQ_HIGH_OCTAVES,
                 BiquadDesign::OneSided,
             );
 
-            // self.touch_cue_eq_filters.0[buffer_index].low_shelf_db(
+            // self.master_eq_filters.0[buffer_index].low_shelf(
             //     MIXER_EQ_LOW_CUTOFF / f64::from(self.target_sample_rate),
-            //     f64::from(amplitude_to_db(self.eq_coefficients.0 +
-            // 1.0).max(-BASICALLY_INFINITY)),     MIXER_EQ_LOW_OCTAVES,
+            //     f64::from(self.eq_low_coefficient + 1.0),
+            //     MIXER_EQ_LOW_OCTAVES,
             //     BiquadDesign::OneSided,
             // );
-            // self.touch_cue_eq_filters.1[buffer_index].peak_db_q(
+            // self.master_eq_filters.1[buffer_index].peak_q(
             //     MIXER_EQ_MID_CENTER / f64::from(self.target_sample_rate),
-            //     f64::from(amplitude_to_db(self.eq_coefficients.1 +
-            // 1.0).max(-BASICALLY_INFINITY)),     MIXER_EQ_MID_Q,
+            //     f64::from(self.eq_mid_coefficient + 1.0),
+            //     MIXER_EQ_MID_Q,
             //     BiquadDesign::Cookbook,
             // );
-            // self.touch_cue_eq_filters.2[buffer_index].high_shelf_db(
+            // self.master_eq_filters.2[buffer_index].high_shelf(
             //     MIXER_EQ_HIGH_CUTOFF / f64::from(self.target_sample_rate),
-            //     f64::from(amplitude_to_db(self.eq_coefficients.2 +
-            // 1.0).max(-BASICALLY_INFINITY)),     MIXER_EQ_HIGH_OCTAVES,
+            //     f64::from(self.eq_high_coefficient + 1.0),
+            //     MIXER_EQ_HIGH_OCTAVES,
             //     BiquadDesign::OneSided,
             // );
+
+            self.touch_cue_eq_filters.0[buffer_index].low_shelf_db(
+                MIXER_EQ_LOW_CUTOFF / f64::from(self.target_sample_rate),
+                f64::from(amplitude_to_db(self.eq_low_coefficient + 1.0).max(-BASICALLY_INFINITY)),
+                MIXER_EQ_LOW_OCTAVES,
+                BiquadDesign::OneSided,
+            );
+            self.touch_cue_eq_filters.1[buffer_index].peak_db_q(
+                MIXER_EQ_MID_CENTER / f64::from(self.target_sample_rate),
+                f64::from(amplitude_to_db(self.eq_mid_coefficient + 1.0).max(-BASICALLY_INFINITY)),
+                MIXER_EQ_MID_Q,
+                BiquadDesign::Cookbook,
+            );
+            self.touch_cue_eq_filters.2[buffer_index].high_shelf_db(
+                MIXER_EQ_HIGH_CUTOFF / f64::from(self.target_sample_rate),
+                f64::from(amplitude_to_db(self.eq_high_coefficient + 1.0).max(-BASICALLY_INFINITY)),
+                MIXER_EQ_HIGH_OCTAVES,
+                BiquadDesign::OneSided,
+            );
 
             self.touch_cue_eq_filters.0[buffer_index].low_shelf(
                 MIXER_EQ_LOW_CUTOFF / f64::from(self.target_sample_rate),

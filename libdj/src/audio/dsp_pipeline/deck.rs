@@ -10,7 +10,7 @@ use crate::{
 pub struct DeckDSP {
     _target_sample_rate: u32,
 
-    channels: [ChannelDSP; MIXER_CHANNELS],
+    pub channels: Vec<ChannelDSP>,
     master_output_buffers: [[Vec<f32>; AUDIO_CHANNELS]; MIXER_CHANNELS],
     cue_output_buffers: [[Vec<f32>; AUDIO_CHANNELS]; MIXER_CHANNELS],
 }
@@ -20,7 +20,7 @@ impl DeckDSP {
         DeckDSP {
             _target_sample_rate: sample_rate,
 
-            channels: [
+            channels: vec![
                 ChannelDSP::new(sample_rate),
                 ChannelDSP::new(sample_rate),
                 ChannelDSP::new(sample_rate),

@@ -10,4 +10,8 @@ impl PlayerState {
                 TempoRange::OneHundredPercent => 1.0,
             }
     }
+
+    pub fn get_tempo_keyshift(&self) -> f32 {
+        12.0 * (1.0 + self.tempo_percent).log2()
+    }
 }

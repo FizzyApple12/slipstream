@@ -183,7 +183,7 @@ FlexboxLayout {
                 verticalAlignment: Text.AlignVCenter
                 horizontalAlignment: Text.AlignHCenter
 
-                text: "DJ Software"
+                text: "Slipstream"
 
                 font.pointSize: 24
                 font.variableAxes: {

@@ -91,7 +91,7 @@ impl PlayerDSP {
             player_update_results.playback_frame_start_time,
             player_update_results.playback_frame_end_time,
             player_update_results.playback_wrap_times,
-            if channel_state.master_tempo && !channel_state.jog_hold {
+            if channel_state.master_tempo && !(channel_state.jog_hold || channel_state.jog_wait) {
                 Some(channel_state.keyshift)
             } else {
                 None

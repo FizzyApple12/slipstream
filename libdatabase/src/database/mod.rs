@@ -73,7 +73,6 @@ impl Database {
             artworks: BTreeMap::new(),
             genres: BTreeMap::new(),
             labels: BTreeMap::new(),
-            keys: BTreeMap::new(),
 
             tracks: BTreeMap::new(),
 

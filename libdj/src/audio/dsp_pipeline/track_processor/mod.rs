@@ -58,7 +58,7 @@ impl TrackProcessor {
         track_data: &TrackAudioData,
         start_time: Timecode,
         end_time: Timecode,
-        wrap_times: Option<(Timecode, Timecode)>,
+        wrap_times: Option<(Timecode, Timecode, usize)>,
         pitch: Option<f32>,
         output_buffers: &mut [Vec<f32>; AUDIO_CHANNELS],
         number_samples: usize,

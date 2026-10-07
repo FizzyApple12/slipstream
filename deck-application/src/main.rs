@@ -3,11 +3,11 @@ pub mod logger;
 pub mod statuses;
 pub mod waveform_loader;
 
-use std::pin::Pin;
+use std::{array, pin::Pin};
 
 use cxx_qt_lib::{QFont, QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 use libdatabase::device_manager::DeviceManager;
-use libdj::{engine::DJEngine, types::deck::DeckState};
+use libdj::{AUDIO_CHANNELS, engine::DJEngine, types::deck::DeckState};
 use libio::{controller::Controller, types::controller::ControllerMessage};
 use log::{debug, info, warn};
 use tokio::task;
@@ -90,6 +90,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let new_deck_state = controller_deck_state_updater.borrow_and_update().clone();
 
+            #[allow(clippy::cast_precision_loss)]
+            let _ = controller.send(ControllerMessage::UpdateCurrentSamples(array::from_fn(
+                |index| {
+                    new_deck_state
+                        .mixer_channels
+                        .get(index)
+                        .map_or(0.0, |channel| {
+                            channel
+                                .average_amplitude
+                                .iter()
+                                .fold(0.0, |accumulator, amplitude| accumulator + amplitude)
+                                / AUDIO_CHANNELS as f32
+                        })
+                },
+            )));
+
             let _ = controller.send(ControllerMessage::UpdateDeckState(new_deck_state));
         }
     });
@@ -107,6 +123,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         loaded_track_sender,
         device_manager,
     );
+
+    unsafe {
+        std::env::set_var("QT_IM_MODULE", "qtvirtualkeyboard");
+        std::env::set_var("QT_VIRTUALKEYBOARD_STYLE", "slipstream");
+    };
 
     let mut app = QGuiApplication::new();
 

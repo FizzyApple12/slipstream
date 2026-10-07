@@ -2,7 +2,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use timecode::Timecode;
 
 use crate::{
-    MIXER_CHANNELS,
+    AUDIO_CHANNELS, MIXER_CHANNELS,
     types::{analysis::TrackAnalysis, library::Track},
 };
 
@@ -93,6 +93,8 @@ impl Default for DeckState {
 pub struct ChannelState {
     pub player: PlayerState,
 
+    pub average_amplitude: [f32; AUDIO_CHANNELS],
+
     pub gain: f32,    // decibels
     pub eq_low: f32,  // decibels
     pub eq_mid: f32,  // decibels
@@ -110,6 +112,8 @@ impl Default for ChannelState {
     fn default() -> Self {
         Self {
             player: PlayerState::default(),
+
+            average_amplitude: [0.0; AUDIO_CHANNELS],
 
             gain: 0.0,
             eq_low: 0.0,  // decibels

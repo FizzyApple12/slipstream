@@ -24,6 +24,8 @@ mod qobject {
         type QHash_i32_QByteArray = cxx_qt_lib::QHash<cxx_qt_lib::QHashPair_i32_QByteArray>;
         include!("cxx-qt-lib/qvector.h");
         type QVector_i32 = cxx_qt_lib::QVector<i32>;
+        include!("cxx-qt-lib/qlist.h");
+        type QList_QVariant = cxx_qt_lib::QList<cxx_qt_lib::QVariant>;
     }
 
     unsafe extern "C++Qt" {
@@ -57,9 +59,14 @@ mod qobject {
     #[namespace = "BrowserPage"]
     pub enum BrowserPage {
         Closed,
-        Device,
-        Playlist,
         Search,
+        Track,
+        Artist,
+        Album,
+        Key,
+        Playlist,
+        History,
+        Device,
     }
 
     #[qml_element]
@@ -134,6 +141,9 @@ mod qobject {
     pub enum BrowserEntryType {
         Track,
         Playlist,
+        Artist,
+        Album,
+        Key,
     }
 
     unsafe extern "RustQt" {
@@ -291,6 +301,7 @@ mod qobject {
         #[qproperty(f32, waveform_texture_stride)]
         #[qproperty(f32, waveform_length_seconds)]
         #[qproperty(*mut GpuTextureSource, preview_waveform_texture_source)]
+        #[qproperty(QList_QVariant, beat_grid)]
         #[qproperty(bool, track_loaded)]
         #[qproperty(QString, track_name)]
         #[qproperty(QString, track_artist)]
@@ -328,6 +339,7 @@ mod qobject {
         #[qproperty(i64, last_beat_loop_start)]
         #[qproperty(i64, last_beat_loop_end)]
         #[qproperty(BeatLoopAdjustMode, beat_loop_adjust_mode)]
+        #[qproperty(QString, current_key)]
         #[qproperty(f32, keyshift)]
         type EngineBridgePlayer = super::EngineBridgePlayerRust;
 
@@ -363,9 +375,17 @@ mod qobject {
         #[qproperty(BrowserPage, browser_page)]
         #[qproperty(*mut SourceListModel, source_index)]
         #[qproperty(*mut BrowserListModel, browser_index)]
-        #[qproperty(QString, search)]
         #[qproperty(bool, device_selected)]
         #[qproperty(i32, active_device)]
+        #[qproperty(QString, search)]
+        #[qproperty(bool, artist_selected)]
+        #[qproperty(QString, active_artist_name)]
+        #[qproperty(bool, album_selected)]
+        #[qproperty(QString, active_album_name)]
+        #[qproperty(bool, key_selected)]
+        #[qproperty(QString, active_key_name)]
+        #[qproperty(bool, playlist_tree_can_pop)]
+        #[qproperty(QString, playlist_tree_name)]
         #[qproperty(*mut EngineBridgeDeck, deck_state)]
         #[qproperty(f64, waveform_pixels_per_second)]
         #[qproperty(bool, mixer_channel_fx_proximity)]
@@ -377,6 +397,32 @@ mod qobject {
 
         #[qinvokable]
         fn select_device(self: Pin<&mut EngineBridge>, device: i32);
+
+        #[qinvokable]
+        fn select_browser_page(self: Pin<&mut EngineBridge>, page: BrowserPage);
+
+        #[qinvokable]
+        fn update_browser(self: Pin<&mut EngineBridge>);
+
+        #[qinvokable]
+        fn select_artist(self: Pin<&mut EngineBridge>, artist: i32);
+        #[qinvokable]
+        fn deselect_artist(self: Pin<&mut EngineBridge>);
+
+        #[qinvokable]
+        fn select_album(self: Pin<&mut EngineBridge>, album: i32);
+        #[qinvokable]
+        fn deselect_album(self: Pin<&mut EngineBridge>);
+
+        #[qinvokable]
+        fn select_key(self: Pin<&mut EngineBridge>, key: i32);
+        #[qinvokable]
+        fn deselect_key(self: Pin<&mut EngineBridge>);
+
+        #[qinvokable]
+        fn push_playlist_node(self: Pin<&mut EngineBridge>, node: i32);
+        #[qinvokable]
+        fn pop_playlist_node(self: Pin<&mut EngineBridge>);
 
         #[qinvokable]
         fn load_track(self: &EngineBridge, player: i32, device: i32, track_id: i32);
@@ -428,10 +474,14 @@ mod qobject {
 use std::{pin::Pin, sync::Mutex};
 
 use cxx_qt::{CxxQtType, Threading};
-use cxx_qt_lib::{QByteArray, QHash, QImage, QModelIndex, QObjectExt, QString, QVariant};
+use cxx_qt_lib::{
+    QByteArray, QHash, QList, QMap, QMapPair_QString_QVariant, QModelIndex, QObjectExt, QString,
+    QVariant,
+};
 use libdatabase::device_manager::DeviceManager;
 use libdj::{
     engine::DJEngine,
+    math::harmonics::Key,
     types::{bindings::UIControlEvent, deck::DeckState, playback::DeckUpdate},
 };
 use libdsp::audio_loader::TrackAudioData;
@@ -472,6 +522,8 @@ pub struct EngineBridgePlayerRust {
     pub waveform_length_seconds: f32,
 
     pub preview_waveform_texture_source: *mut GpuTextureSource,
+
+    pub beat_grid: QList<QVariant>,
 
     pub track_loaded: bool,
     pub track_name: QString,
@@ -522,6 +574,7 @@ pub struct EngineBridgePlayerRust {
     pub last_beat_loop_end: i64,   // timecode us
     pub beat_loop_adjust_mode: BeatLoopAdjustMode,
 
+    pub current_key: QString,
     pub keyshift: f32, // semitones
 }
 
@@ -533,6 +586,8 @@ impl Default for EngineBridgePlayerRust {
             waveform_length_seconds: 0.0,
 
             preview_waveform_texture_source: new_gpu_texture_source(),
+
+            beat_grid: QList::default(),
 
             track_loaded: false,
             track_name: QString::from(""),
@@ -582,6 +637,7 @@ impl Default for EngineBridgePlayerRust {
             last_beat_loop_end: 0,
             beat_loop_adjust_mode: BeatLoopAdjustMode::None,
 
+            current_key: QString::from("1A"),
             keyshift: 0.0,
         }
     }
@@ -680,10 +736,26 @@ pub struct EngineBridgeRust {
 
     pub browser_index: *mut BrowserListModel,
 
-    pub search: QString,
-
     pub device_selected: bool,
     pub active_device: i32,
+
+    pub search: QString,
+
+    pub artist_selected: bool,
+    pub active_artist: Option<u32>,
+    pub active_artist_name: QString,
+
+    pub album_selected: bool,
+    pub active_album: Option<u32>,
+    pub active_album_name: QString,
+
+    pub key_selected: bool,
+    pub active_key: Option<i32>,
+    pub active_key_name: QString,
+
+    pub playlist_tree: Vec<u32>,
+    pub playlist_tree_can_pop: bool,
+    pub playlist_tree_name: QString,
 
     pub deck_state: *mut EngineBridgeDeck,
 
@@ -717,10 +789,26 @@ impl cxx_qt::Constructor<()> for qobject::EngineBridge {
 
             browser_index: std::ptr::null_mut(),
 
-            search: QString::from(""),
-
             device_selected: false,
             active_device: 0,
+
+            search: QString::from(""),
+
+            artist_selected: false,
+            active_artist: None,
+            active_artist_name: QString::from(""),
+
+            album_selected: false,
+            active_album: None,
+            active_album_name: QString::from(""),
+
+            key_selected: false,
+            active_key: None,
+            active_key_name: QString::from(""),
+
+            playlist_tree: Vec::new(),
+            playlist_tree_can_pop: false,
+            playlist_tree_name: QString::from("/"),
 
             deck_state: new_engine_bridge_deck(),
 
@@ -782,6 +870,7 @@ impl cxx_qt::Constructor<()> for qobject::EngineBridge {
 
             player_pin.as_mut().set_parent(mixer_channel_pin.as_mut());
 
+            // Safety: Probably not
             let mut waveform_texture_source_pin = unsafe {
                 let Some(waveform_texture_source) = player_pin.waveform_texture_source.as_mut()
                 else {
@@ -795,6 +884,7 @@ impl cxx_qt::Constructor<()> for qobject::EngineBridge {
                 .as_mut()
                 .set_parent(player_pin.as_mut());
 
+            // Safety: Probably not
             let mut preview_waveform_texture_source_pin = unsafe {
                 let Some(preview_waveform_texture_source) =
                     player_pin.preview_waveform_texture_source.as_mut()
@@ -924,61 +1014,16 @@ impl qobject::EngineBridge {
                     self.as_mut().rebuild_browse_index(engine_connection);
                 }
                 UIControlEvent::BrowserBrowsePress => {
-                    if self.browser_page == BrowserPage::Closed {
-                        self.as_mut().set_browser_page(BrowserPage::Device);
-
-                        if !self.device_selected {
-                            self.as_mut().set_source_open(true);
-                        }
-                    } else if self.source_open {
-                        self.as_mut().set_source_open(false);
-
-                        if !self.device_selected {
-                            self.as_mut().set_browser_page(BrowserPage::Closed);
-                        }
-                    } else {
-                        self.as_mut().set_browser_page(BrowserPage::Closed);
-                    }
-
-                    self.as_mut().rebuild_browse_index(engine_connection);
+                    self.as_mut()
+                        .select_browser_page_internal(BrowserPage::Track, engine_connection);
                 }
                 UIControlEvent::BrowserPlaylistPress => {
-                    if self.browser_page == BrowserPage::Closed {
-                        self.as_mut().set_browser_page(BrowserPage::Playlist);
-
-                        if !self.device_selected {
-                            self.as_mut().set_source_open(true);
-                        }
-                    } else if self.source_open {
-                        self.as_mut().set_source_open(false);
-
-                        if !self.device_selected {
-                            self.as_mut().set_browser_page(BrowserPage::Closed);
-                        }
-                    } else {
-                        self.as_mut().set_browser_page(BrowserPage::Closed);
-                    }
-
-                    self.as_mut().rebuild_browse_index(engine_connection);
+                    self.as_mut()
+                        .select_browser_page_internal(BrowserPage::Playlist, engine_connection);
                 }
                 UIControlEvent::BrowserSearchPress => {
-                    if self.as_mut().browser_page == BrowserPage::Closed {
-                        self.as_mut().set_browser_page(BrowserPage::Search);
-
-                        if !self.as_mut().device_selected {
-                            self.as_mut().set_source_open(true);
-                        }
-                    } else if self.as_mut().source_open {
-                        self.as_mut().set_source_open(false);
-
-                        if !self.as_mut().device_selected {
-                            self.as_mut().set_browser_page(BrowserPage::Closed);
-                        }
-                    } else {
-                        self.as_mut().set_browser_page(BrowserPage::Closed);
-                    }
-
-                    self.as_mut().rebuild_browse_index(engine_connection);
+                    self.as_mut()
+                        .select_browser_page_internal(BrowserPage::Search, engine_connection);
                 }
                 UIControlEvent::MixerChannelFXProximityPress => {
                     self.as_mut().set_mixer_channel_fx_proximity(true);
@@ -1008,12 +1053,312 @@ impl qobject::EngineBridge {
         };
 
         if *self.as_ref().browser_page() == BrowserPage::Closed {
-            self.as_mut().set_browser_page(BrowserPage::Device);
+            self.as_mut().set_browser_page(BrowserPage::Track);
         }
 
         self.as_mut().rebuild_browse_index(engine_connection);
 
         self.as_mut().set_source_open(false);
+    }
+
+    fn select_browser_page(mut self: Pin<&mut Self>, page: BrowserPage) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        self.as_mut()
+            .select_browser_page_internal(page, engine_connection);
+    }
+
+    fn select_browser_page_internal(
+        mut self: Pin<&mut Self>,
+        page: BrowserPage,
+        engine_connection: &mut EngineConnection,
+    ) {
+        if self.as_mut().browser_page == BrowserPage::Closed {
+            self.as_mut().set_browser_page(page);
+
+            if !self.as_mut().device_selected {
+                self.as_mut().set_source_open(true);
+            }
+        } else if self.as_mut().source_open {
+            self.as_mut().set_source_open(false);
+
+            if !self.as_mut().device_selected {
+                self.as_mut().set_browser_page(BrowserPage::Closed);
+            }
+        } else if self.as_mut().browser_page != page {
+            self.as_mut().set_browser_page(page);
+        }
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    fn update_browser(mut self: Pin<&mut Self>) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    fn select_artist(mut self: Pin<&mut Self>, artist: i32) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        if !self.device_selected {
+            return;
+        }
+
+        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+
+        let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
+            return;
+        };
+
+        let artist_id = artist as u32;
+
+        let Some(artist) = device.database.library.artists.get(&artist_id) else {
+            return;
+        };
+
+        self.as_mut()
+            .set_active_artist_name(QString::from(artist.name.clone()));
+        self.as_mut().set_artist_selected(true);
+
+        drop(locked_device_manager);
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    fn deselect_artist(mut self: Pin<&mut Self>) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        self.as_mut().rust_mut().active_artist = None;
+        self.as_mut().set_artist_selected(false);
+        self.as_mut().set_active_artist_name(QString::from(""));
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    fn select_album(mut self: Pin<&mut Self>, album: i32) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        if !self.device_selected {
+            return;
+        }
+
+        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+
+        let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
+            return;
+        };
+
+        let album_id = album as u32;
+
+        let Some(album) = device.database.library.albums.get(&album_id) else {
+            return;
+        };
+
+        self.as_mut()
+            .set_active_album_name(QString::from(album.name.clone()));
+        self.as_mut().set_album_selected(true);
+
+        drop(locked_device_manager);
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    fn deselect_album(mut self: Pin<&mut Self>) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        self.as_mut().rust_mut().active_album = None;
+        self.as_mut().set_album_selected(false);
+        self.as_mut().set_active_album_name(QString::from(""));
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    fn select_key(mut self: Pin<&mut Self>, key: i32) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        if !self.device_selected {
+            return;
+        }
+
+        let key = Key::from_semitones(key);
+
+        self.as_mut()
+            .set_active_key_name(QString::from(key.to_camelot()));
+        self.as_mut().set_key_selected(true);
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    fn deselect_key(mut self: Pin<&mut Self>) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        self.as_mut().rust_mut().active_key = None;
+        self.as_mut().set_key_selected(false);
+        self.as_mut().set_active_key_name(QString::from(""));
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    fn push_playlist_node(mut self: Pin<&mut Self>, node: i32) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        if !self.device_selected {
+            return;
+        }
+
+        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+
+        let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
+            return;
+        };
+
+        let node_id = node as u32;
+
+        if !device.database.library.playlist_tree.contains_key(&node_id) {
+            return;
+        }
+
+        let mut playlist_tree_name = String::from("/");
+
+        for playlist_node in &self.playlist_tree {
+            let node_name = device
+                .database
+                .library
+                .playlist_tree
+                .get(playlist_node)
+                .map_or(
+                    String::new(),
+                    |playlist_node_entry| match playlist_node_entry {
+                        libdj::types::library::PlaylistTreeNode::Playlist(playlist) => {
+                            playlist.name.clone()
+                        }
+                        libdj::types::library::PlaylistTreeNode::PlaylistFolder(
+                            playlist_folder,
+                        ) => playlist_folder.name.clone(),
+                    },
+                );
+
+            playlist_tree_name.push_str(&node_name);
+
+            playlist_tree_name.push('/');
+        }
+
+        self.as_mut().rust_mut().playlist_tree.push(node_id);
+        self.as_mut()
+            .set_playlist_tree_name(QString::from(playlist_tree_name));
+        self.as_mut().set_playlist_tree_can_pop(true);
+
+        drop(locked_device_manager);
+
+        self.as_mut().rebuild_browse_index(engine_connection);
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    fn pop_playlist_node(mut self: Pin<&mut Self>) {
+        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+            return;
+        };
+        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+            return;
+        };
+
+        if !self.device_selected {
+            return;
+        }
+
+        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+
+        let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
+            return;
+        };
+
+        let _ = self.as_mut().rust_mut().playlist_tree.pop();
+
+        let mut playlist_tree_name = String::from("/");
+        let mut tree_empty = true;
+
+        for playlist_node in &self.playlist_tree {
+            tree_empty = false;
+
+            let node_name = device
+                .database
+                .library
+                .playlist_tree
+                .get(playlist_node)
+                .map_or(
+                    String::new(),
+                    |playlist_node_entry| match playlist_node_entry {
+                        libdj::types::library::PlaylistTreeNode::Playlist(playlist) => {
+                            playlist.name.clone()
+                        }
+                        libdj::types::library::PlaylistTreeNode::PlaylistFolder(
+                            playlist_folder,
+                        ) => playlist_folder.name.clone(),
+                    },
+                );
+
+            playlist_tree_name.push_str(&node_name);
+
+            playlist_tree_name.push('/');
+        }
+
+        self.as_mut()
+            .set_playlist_tree_name(QString::from(playlist_tree_name));
+        self.as_mut().set_playlist_tree_can_pop(!tree_empty);
+
+        drop(locked_device_manager);
+
+        self.as_mut().rebuild_browse_index(engine_connection);
     }
 
     #[allow(clippy::cast_sign_loss)]
@@ -1035,6 +1380,7 @@ impl qobject::EngineBridge {
         let device_manager = engine_connection.device_manager.subscribe();
 
         let qt_executor_track_details = self.qt_thread();
+        let qt_executor_track_analysis = self.qt_thread();
         let qt_executor_preview_waveform = self.qt_thread();
         let qt_executor_full_waveform = self.qt_thread();
 
@@ -1072,7 +1418,7 @@ impl qobject::EngineBridge {
                 {
                     artist.name.clone()
                 } else {
-                    "".to_string()
+                    String::new()
                 };
                 let cloned_track_duration = track.duration;
 
@@ -1159,9 +1505,61 @@ impl qobject::EngineBridge {
                                 Some(cloned_track_analysis);
                         }
                     }));
+
+                    let _ = qt_executor_track_analysis.queue(move |engine_bridge| {
+                        // Safety: Probably not
+                        let deck_state_pin = unsafe {
+                            let Some(deck_state) = engine_bridge.deck_state.as_mut() else {
+                                return;
+                            };
+
+                            Pin::new_unchecked(&mut *deck_state)
+                        };
+
+                        if let Some(mixer_channel) = deck_state_pin.mixer_channels.get(player) {
+                            // Safety: Probably not
+                            let mixer_channel_pin = unsafe {
+                                let Some(mixer_channel) = mixer_channel.as_mut() else {
+                                    return;
+                                };
+
+                                Pin::new_unchecked(&mut *mixer_channel)
+                            };
+
+                            // Safety: Probably not
+                            let mut player_pin = unsafe {
+                                let Some(player) = mixer_channel_pin.player.as_mut() else {
+                                    return;
+                                };
+
+                                Pin::new_unchecked(&mut *player)
+                            };
+
+                            player_pin.as_mut().set_beat_grid(
+                                track_analysis
+                                    .beat_grid
+                                    .iter()
+                                    .map(|beat| {
+                                        let mut m = QMap::<QMapPair_QString_QVariant>::default();
+
+                                        m.insert(
+                                            QString::from("beat_number"),
+                                            QVariant::from(&beat.beat_number),
+                                        );
+                                        m.insert(
+                                            QString::from("time"),
+                                            QVariant::from(&beat.time.nanoseconds),
+                                        );
+
+                                        QVariant::from(&m)
+                                    })
+                                    .collect(),
+                            );
+                        }
+                    });
                 } else {
                     std::thread::spawn(move || {
-                        // todo: perform track analysis
+                        // todo: perform track analysis and then send
                     });
                 }
 
@@ -1195,7 +1593,7 @@ impl qobject::EngineBridge {
                                 };
 
                                 // Safety: Probably not
-                                let mut player_pin = unsafe {
+                                let player_pin = unsafe {
                                     let Some(player) = mixer_channel_pin.player.as_mut() else {
                                         return;
                                     };
@@ -1369,7 +1767,7 @@ impl qobject::EngineBridge {
             }));
     }
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     fn update_from_deck_state(self: Pin<&mut Self>, state: &libdj::types::deck::DeckState) {
         // Safety: Probably not
         let mut deck_state_pin = unsafe {
@@ -1404,9 +1802,21 @@ impl qobject::EngineBridge {
                 Pin::new_unchecked(&mut *player)
             };
 
-            player_pin
-                .as_mut()
-                .set_track_loaded(new_channel.player.current_track.is_some());
+            if let Some((_, track)) = &new_channel.player.current_track {
+                player_pin.as_mut().set_track_loaded(true);
+                player_pin.as_mut().set_current_key(QString::from(
+                    track
+                        .key
+                        .shift(
+                            (new_channel.player.keyshift + new_channel.player.get_tempo_keyshift())
+                                .round() as i32,
+                        )
+                        .to_camelot(),
+                ));
+            } else {
+                player_pin.as_mut().set_track_loaded(false);
+                player_pin.as_mut().set_current_key(QString::from("--"));
+            }
 
             if let Some(bpm) = new_channel.player.get_current_bpm() {
                 player_pin.as_mut().set_current_bpm(bpm);
@@ -1599,7 +2009,7 @@ impl qobject::EngineBridge {
             .devices
             .blocking_lock()
             .get(&number)
-            .map_or("".to_string(), |device| device.name.clone());
+            .map_or(String::new(), |device| device.name.clone());
 
         // Safety: Probably not
         let mut source_index_pin = unsafe {
@@ -1738,7 +2148,120 @@ impl qobject::EngineBridge {
         browser_index_pin.as_mut().begin_reset_model();
 
         match self.browser_page {
-            BrowserPage::Device => {
+            BrowserPage::Search => {
+                browser_index_pin.as_mut().rust_mut().items.clear();
+
+                let search = &self.search.to_string();
+
+                for (
+                    index,
+                    (
+                        track,
+                        track_artist,
+                        track_original_artist,
+                        track_remixer,
+                        track_label,
+                        track_album,
+                        track_genre,
+                        track_key,
+                    ),
+                ) in device
+                    .database
+                    .library
+                    .tracks
+                    .values()
+                    .map(|track| {
+                        (
+                            track,
+                            device
+                                .database
+                                .library
+                                .artists
+                                .get(&track.artist_id)
+                                .map_or(String::new(), |artist| artist.name.clone()),
+                            device
+                                .database
+                                .library
+                                .artists
+                                .get(&track.original_artist_id)
+                                .map_or(String::new(), |artist| artist.name.clone()),
+                            device
+                                .database
+                                .library
+                                .artists
+                                .get(&track.remixer_id)
+                                .map_or(String::new(), |artist| artist.name.clone()),
+                            device
+                                .database
+                                .library
+                                .labels
+                                .get(&track.label_id)
+                                .map_or(String::new(), |label| label.name.clone()),
+                            device
+                                .database
+                                .library
+                                .albums
+                                .get(&track.album_id)
+                                .map_or(String::new(), |album| album.name.clone()),
+                            device
+                                .database
+                                .library
+                                .genres
+                                .get(&track.genre_id)
+                                .map_or(String::new(), |genre| genre.name.clone()),
+                            String::from(track.key.to_camelot()),
+                        )
+                    })
+                    .filter(
+                        |(
+                            track,
+                            track_artist,
+                            track_original_artist,
+                            track_remixer,
+                            track_label,
+                            track_album,
+                            track_genre,
+                            track_key,
+                        )| {
+                            let filtered_search = search.to_lowercase();
+
+                            // todo: fuzzy match
+                            track.title.to_lowercase().contains(&filtered_search)
+                                || track_artist.to_lowercase().contains(&filtered_search)
+                                || track_original_artist
+                                    .to_lowercase()
+                                    .contains(&filtered_search)
+                                || track_remixer.to_lowercase().contains(&filtered_search)
+                                || track_label.to_lowercase().contains(&filtered_search)
+                                || track_album.to_lowercase().contains(&filtered_search)
+                                || track_genre.to_lowercase().contains(&filtered_search)
+                                || track_key.to_lowercase().contains(&filtered_search)
+                        },
+                    )
+                    .enumerate()
+                {
+                    browser_index_pin
+                        .as_mut()
+                        .rust_mut()
+                        .items
+                        .push(BrowserListEntry {
+                            entry_type: BrowserEntryType::Track,
+                            entry_number: index as i32,
+                            node_id: track.id as i32,
+                            title: QString::from(track.title.clone()),
+                            artist: QString::from(track_artist),
+                            original_artist: QString::from(track_original_artist),
+                            remixer: QString::from(track_remixer),
+                            label: QString::from(track_label),
+                            album: QString::from(track_album),
+                            genre: QString::from(track_genre),
+                            key: QString::from(track_key),
+                            duration: track.duration,
+                            bpm: track.bpm,
+                        });
+                }
+            }
+            BrowserPage::Track => {
                 browser_index_pin.as_mut().rust_mut().items.clear();
 
                 for (index, track) in device.database.library.tracks.values().enumerate() {
@@ -1757,55 +2280,619 @@ impl qobject::EngineBridge {
                                     .library
                                     .artists
                                     .get(&track.artist_id)
-                                    .map_or("".to_string(), |artist| artist.name.clone()),
+                                    .map_or(String::new(), |artist| artist.name.clone()),
                             ),
-                            duration: track.duration,
-                            bpm: track.bpm,
-                        });
-                }
-            }
-            BrowserPage::Playlist => {
-                browser_index_pin.as_mut().rust_mut().items.clear();
-            }
-            BrowserPage::Search => {
-                browser_index_pin.as_mut().rust_mut().items.clear();
-
-                let search = &self.search.to_string();
-
-                for (index, track) in device
-                    .database
-                    .library
-                    .tracks
-                    .values()
-                    .filter(|track| {
-                        // todo: build a better index and fuzzy match
-                        track.title.contains(search)
-                    })
-                    .enumerate()
-                {
-                    browser_index_pin
-                        .as_mut()
-                        .rust_mut()
-                        .items
-                        .push(BrowserListEntry {
-                            entry_type: BrowserEntryType::Track,
-                            entry_number: index as i32,
-                            node_id: track.id as i32,
-                            title: QString::from(track.title.clone()),
-                            artist: QString::from(
+                            original_artist: QString::from(
                                 device
                                     .database
                                     .library
                                     .artists
-                                    .get(&track.artist_id)
-                                    .map_or("".to_string(), |artist| artist.name.clone()),
+                                    .get(&track.original_artist_id)
+                                    .map_or(String::new(), |artist| artist.name.clone()),
                             ),
+                            remixer: QString::from(
+                                device
+                                    .database
+                                    .library
+                                    .artists
+                                    .get(&track.remixer_id)
+                                    .map_or(String::new(), |artist| artist.name.clone()),
+                            ),
+                            label: QString::from(
+                                device
+                                    .database
+                                    .library
+                                    .labels
+                                    .get(&track.label_id)
+                                    .map_or(String::new(), |label| label.name.clone()),
+                            ),
+                            album: QString::from(
+                                device
+                                    .database
+                                    .library
+                                    .albums
+                                    .get(&track.album_id)
+                                    .map_or(String::new(), |album| album.name.clone()),
+                            ),
+                            genre: QString::from(
+                                device
+                                    .database
+                                    .library
+                                    .genres
+                                    .get(&track.genre_id)
+                                    .map_or(String::new(), |genre| genre.name.clone()),
+                            ),
+                            key: QString::from(track.key.to_camelot()),
                             duration: track.duration,
                             bpm: track.bpm,
                         });
                 }
             }
-            _ => {}
+            BrowserPage::Artist => {
+                browser_index_pin.as_mut().rust_mut().items.clear();
+
+                if let Some(active_artist) = self.active_artist {
+                    for (index, track) in device
+                        .database
+                        .library
+                        .tracks
+                        .values()
+                        .filter(|track| track.artist_id == active_artist)
+                        .enumerate()
+                    {
+                        browser_index_pin
+                            .as_mut()
+                            .rust_mut()
+                            .items
+                            .push(BrowserListEntry {
+                                entry_type: BrowserEntryType::Track,
+                                entry_number: index as i32,
+                                node_id: track.id as i32,
+                                title: QString::from(track.title.clone()),
+                                artist: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.artist_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                original_artist: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.original_artist_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                remixer: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.remixer_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                label: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .labels
+                                        .get(&track.label_id)
+                                        .map_or(String::new(), |label| label.name.clone()),
+                                ),
+                                album: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .albums
+                                        .get(&track.album_id)
+                                        .map_or(String::new(), |album| album.name.clone()),
+                                ),
+                                genre: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .genres
+                                        .get(&track.genre_id)
+                                        .map_or(String::new(), |genre| genre.name.clone()),
+                                ),
+                                key: QString::from(track.key.to_camelot()),
+                                duration: track.duration,
+                                bpm: track.bpm,
+                            });
+                    }
+                } else {
+                    for (index, (artist_id, artist)) in
+                        device.database.library.artists.iter().enumerate()
+                    {
+                        browser_index_pin
+                            .as_mut()
+                            .rust_mut()
+                            .items
+                            .push(BrowserListEntry {
+                                entry_type: BrowserEntryType::Artist,
+                                entry_number: index as i32,
+                                node_id: *artist_id as i32,
+                                title: QString::from(artist.name.clone()),
+                                artist: QString::from(""),
+                                original_artist: QString::from(""),
+                                remixer: QString::from(""),
+                                label: QString::from(""),
+                                album: QString::from(""),
+                                genre: QString::from(""),
+                                key: QString::from(""),
+                                duration: 0,
+                                bpm: 0.0,
+                            });
+                    }
+                }
+            }
+            BrowserPage::Album => {
+                browser_index_pin.as_mut().rust_mut().items.clear();
+
+                if let Some(active_album) = self.active_album {
+                    for (index, track) in device
+                        .database
+                        .library
+                        .tracks
+                        .values()
+                        .filter(|track| track.album_id == active_album)
+                        .enumerate()
+                    {
+                        browser_index_pin
+                            .as_mut()
+                            .rust_mut()
+                            .items
+                            .push(BrowserListEntry {
+                                entry_type: BrowserEntryType::Track,
+                                entry_number: index as i32,
+                                node_id: track.id as i32,
+                                title: QString::from(track.title.clone()),
+                                artist: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.artist_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                original_artist: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.original_artist_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                remixer: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.remixer_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                label: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .labels
+                                        .get(&track.label_id)
+                                        .map_or(String::new(), |label| label.name.clone()),
+                                ),
+                                album: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .albums
+                                        .get(&track.album_id)
+                                        .map_or(String::new(), |album| album.name.clone()),
+                                ),
+                                genre: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .genres
+                                        .get(&track.genre_id)
+                                        .map_or(String::new(), |genre| genre.name.clone()),
+                                ),
+                                key: QString::from(track.key.to_camelot()),
+                                duration: track.duration,
+                                bpm: track.bpm,
+                            });
+                    }
+                } else {
+                    for (index, (album_id, album)) in
+                        device.database.library.albums.iter().enumerate()
+                    {
+                        browser_index_pin
+                            .as_mut()
+                            .rust_mut()
+                            .items
+                            .push(BrowserListEntry {
+                                entry_type: BrowserEntryType::Album,
+                                entry_number: index as i32,
+                                node_id: *album_id as i32,
+                                title: QString::from(album.name.clone()),
+                                artist: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&album.artist_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                original_artist: QString::from(""),
+                                remixer: QString::from(""),
+                                label: QString::from(""),
+                                album: QString::from(""),
+                                genre: QString::from(""),
+                                key: QString::from(""),
+                                duration: 0,
+                                bpm: 0.0,
+                            });
+                    }
+                }
+            }
+            BrowserPage::Key => {
+                browser_index_pin.as_mut().rust_mut().items.clear();
+
+                if let Some(active_key) = self.active_key {
+                    for (index, track) in device
+                        .database
+                        .library
+                        .tracks
+                        .values()
+                        .filter(|track| track.key == Key::from_semitones(active_key))
+                        .enumerate()
+                    {
+                        browser_index_pin
+                            .as_mut()
+                            .rust_mut()
+                            .items
+                            .push(BrowserListEntry {
+                                entry_type: BrowserEntryType::Track,
+                                entry_number: index as i32,
+                                node_id: track.id as i32,
+                                title: QString::from(track.title.clone()),
+                                artist: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.artist_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                original_artist: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.original_artist_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                remixer: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .artists
+                                        .get(&track.remixer_id)
+                                        .map_or(String::new(), |artist| artist.name.clone()),
+                                ),
+                                label: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .labels
+                                        .get(&track.label_id)
+                                        .map_or(String::new(), |label| label.name.clone()),
+                                ),
+                                album: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .albums
+                                        .get(&track.album_id)
+                                        .map_or(String::new(), |album| album.name.clone()),
+                                ),
+                                genre: QString::from(
+                                    device
+                                        .database
+                                        .library
+                                        .genres
+                                        .get(&track.genre_id)
+                                        .map_or(String::new(), |genre| genre.name.clone()),
+                                ),
+                                key: QString::from(track.key.to_camelot()),
+                                duration: track.duration,
+                                bpm: track.bpm,
+                            });
+                    }
+                } else {
+                    for semitone in 0..23 {
+                        let key = Key::from_semitones(semitone);
+
+                        browser_index_pin
+                            .as_mut()
+                            .rust_mut()
+                            .items
+                            .push(BrowserListEntry {
+                                entry_type: BrowserEntryType::Key,
+                                entry_number: semitone,
+                                node_id: semitone,
+                                title: QString::from(key.to_camelot()),
+                                artist: QString::from(""),
+                                original_artist: QString::from(""),
+                                remixer: QString::from(""),
+                                label: QString::from(""),
+                                album: QString::from(""),
+                                genre: QString::from(""),
+                                key: QString::from(""),
+                                duration: 0,
+                                bpm: 0.0,
+                            });
+                    }
+                }
+            }
+            BrowserPage::Playlist => {
+                browser_index_pin.as_mut().rust_mut().items.clear();
+
+                if let Some(playlist_node_id) = self.playlist_tree.last()
+                    && let Some(playlist_node) =
+                        device.database.library.playlist_tree.get(playlist_node_id)
+                {
+                    match playlist_node {
+                        libdj::types::library::PlaylistTreeNode::Playlist(playlist) => {
+                            for (index, track) in playlist
+                                .tracks
+                                .iter()
+                                .filter_map(|track_id| device.database.library.tracks.get(track_id))
+                                .enumerate()
+                            {
+                                browser_index_pin.as_mut().rust_mut().items.push(
+                                    BrowserListEntry {
+                                        entry_type: BrowserEntryType::Track,
+                                        entry_number: index as i32,
+                                        node_id: track.id as i32,
+                                        title: QString::from(track.title.clone()),
+                                        artist: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .artists
+                                                .get(&track.artist_id)
+                                                .map_or(String::new(), |artist| {
+                                                    artist.name.clone()
+                                                }),
+                                        ),
+                                        original_artist: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .artists
+                                                .get(&track.original_artist_id)
+                                                .map_or(String::new(), |artist| {
+                                                    artist.name.clone()
+                                                }),
+                                        ),
+                                        remixer: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .artists
+                                                .get(&track.remixer_id)
+                                                .map_or(String::new(), |artist| {
+                                                    artist.name.clone()
+                                                }),
+                                        ),
+                                        label: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .labels
+                                                .get(&track.label_id)
+                                                .map_or(String::new(), |label| label.name.clone()),
+                                        ),
+                                        album: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .albums
+                                                .get(&track.album_id)
+                                                .map_or(String::new(), |album| album.name.clone()),
+                                        ),
+                                        genre: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .genres
+                                                .get(&track.genre_id)
+                                                .map_or(String::new(), |genre| genre.name.clone()),
+                                        ),
+                                        key: QString::from(track.key.to_camelot()),
+                                        duration: track.duration,
+                                        bpm: track.bpm,
+                                    },
+                                );
+                            }
+                        }
+                        libdj::types::library::PlaylistTreeNode::PlaylistFolder(
+                            playlist_folder,
+                        ) => {
+                            for (index, playlist_node) in playlist_folder
+                                .children
+                                .iter()
+                                .filter_map(|playlist_id| {
+                                    device.database.library.playlist_tree.get(playlist_id)
+                                })
+                                .enumerate()
+                            {
+                                browser_index_pin
+                                    .as_mut()
+                                    .rust_mut()
+                                    .items
+                                    .push(BrowserListEntry {
+                                    entry_type: BrowserEntryType::Playlist,
+                                    entry_number: index as i32,
+                                    node_id: match playlist_node {
+                                        libdj::types::library::PlaylistTreeNode::Playlist(
+                                            playlist,
+                                        ) => playlist.id,
+                                        libdj::types::library::PlaylistTreeNode::PlaylistFolder(
+                                            playlist_folder,
+                                        ) => playlist_folder.id,
+                                    } as i32,
+                                    title: QString::from(match playlist_node {
+                                        libdj::types::library::PlaylistTreeNode::Playlist(
+                                            playlist,
+                                        ) => playlist.name.clone(),
+                                        libdj::types::library::PlaylistTreeNode::PlaylistFolder(
+                                            playlist_folder,
+                                        ) => playlist_folder.name.clone(),
+                                    }),
+                                    artist: QString::from(""),
+                                    original_artist: QString::from(""),
+                                    remixer: QString::from(""),
+                                    label: QString::from(""),
+                                    album: QString::from(""),
+                                    genre: QString::from(""),
+                                    key: QString::from(""),
+                                    duration: 0,
+                                    bpm: 0.0,
+                                });
+                            }
+                        }
+                    }
+                } else if let Some(playlist_node) = device.database.library.playlist_tree.get(&0) {
+                    match playlist_node {
+                        libdj::types::library::PlaylistTreeNode::Playlist(playlist) => {
+                            for (index, track) in playlist
+                                .tracks
+                                .iter()
+                                .filter_map(|track_id| device.database.library.tracks.get(track_id))
+                                .enumerate()
+                            {
+                                browser_index_pin.as_mut().rust_mut().items.push(
+                                    BrowserListEntry {
+                                        entry_type: BrowserEntryType::Track,
+                                        entry_number: index as i32,
+                                        node_id: track.id as i32,
+                                        title: QString::from(track.title.clone()),
+                                        artist: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .artists
+                                                .get(&track.artist_id)
+                                                .map_or(String::new(), |artist| {
+                                                    artist.name.clone()
+                                                }),
+                                        ),
+                                        original_artist: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .artists
+                                                .get(&track.original_artist_id)
+                                                .map_or(String::new(), |artist| {
+                                                    artist.name.clone()
+                                                }),
+                                        ),
+                                        remixer: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .artists
+                                                .get(&track.remixer_id)
+                                                .map_or(String::new(), |artist| {
+                                                    artist.name.clone()
+                                                }),
+                                        ),
+                                        label: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .labels
+                                                .get(&track.label_id)
+                                                .map_or(String::new(), |label| label.name.clone()),
+                                        ),
+                                        album: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .albums
+                                                .get(&track.album_id)
+                                                .map_or(String::new(), |album| album.name.clone()),
+                                        ),
+                                        genre: QString::from(
+                                            device
+                                                .database
+                                                .library
+                                                .genres
+                                                .get(&track.genre_id)
+                                                .map_or(String::new(), |genre| genre.name.clone()),
+                                        ),
+                                        key: QString::from(track.key.to_camelot()),
+                                        duration: track.duration,
+                                        bpm: track.bpm,
+                                    },
+                                );
+                            }
+                        }
+                        libdj::types::library::PlaylistTreeNode::PlaylistFolder(
+                            playlist_folder,
+                        ) => {
+                            for (index, playlist_node) in playlist_folder
+                                .children
+                                .iter()
+                                .filter_map(|playlist_id| {
+                                    device.database.library.playlist_tree.get(playlist_id)
+                                })
+                                .enumerate()
+                            {
+                                browser_index_pin
+                                    .as_mut()
+                                    .rust_mut()
+                                    .items
+                                    .push(BrowserListEntry {
+                                    entry_type: BrowserEntryType::Playlist,
+                                    entry_number: index as i32,
+                                    node_id: match playlist_node {
+                                        libdj::types::library::PlaylistTreeNode::Playlist(
+                                            playlist,
+                                        ) => playlist.id,
+                                        libdj::types::library::PlaylistTreeNode::PlaylistFolder(
+                                            playlist_folder,
+                                        ) => playlist_folder.id,
+                                    } as i32,
+                                    title: QString::from(match playlist_node {
+                                        libdj::types::library::PlaylistTreeNode::Playlist(
+                                            playlist,
+                                        ) => playlist.name.clone(),
+                                        libdj::types::library::PlaylistTreeNode::PlaylistFolder(
+                                            playlist_folder,
+                                        ) => playlist_folder.name.clone(),
+                                    }),
+                                    artist: QString::from(""),
+                                    original_artist: QString::from(""),
+                                    remixer: QString::from(""),
+                                    label: QString::from(""),
+                                    album: QString::from(""),
+                                    genre: QString::from(""),
+                                    key: QString::from(""),
+                                    duration: 0,
+                                    bpm: 0.0,
+                                });
+                            }
+                        }
+                    }
+                } else {
+                }
+            }
+            _ => {
+                browser_index_pin.as_mut().rust_mut().items.clear();
+            }
         }
 
         browser_index_pin.as_mut().end_reset_model();
@@ -1864,8 +2951,14 @@ const BROWSER_LIST_MODEL_ENTRY_NUMBER_ROLE: i32 = 1;
 const BROWSER_LIST_MODEL_NODE_ID_ROLE: i32 = 2;
 const BROWSER_LIST_MODEL_TITLE_ROLE: i32 = 3;
 const BROWSER_LIST_MODEL_ARTIST_ROLE: i32 = 4;
-const BROWSER_LIST_MODEL_DURATION_ROLE: i32 = 5;
-const BROWSER_LIST_MODEL_BPM_ROLE: i32 = 6;
+const BROWSER_LIST_MODEL_ORIGINAL_ARTIST_ROLE: i32 = 5;
+const BROWSER_LIST_MODEL_REMIXER_ROLE: i32 = 6;
+const BROWSER_LIST_MODEL_LABEL_ROLE: i32 = 7;
+const BROWSER_LIST_MODEL_ALBUM_ROLE: i32 = 8;
+const BROWSER_LIST_MODEL_GENRE_ROLE: i32 = 9;
+const BROWSER_LIST_MODEL_KEY_ROLE: i32 = 10;
+const BROWSER_LIST_MODEL_DURATION_ROLE: i32 = 11;
+const BROWSER_LIST_MODEL_BPM_ROLE: i32 = 12;
 
 #[derive(PartialEq)]
 pub struct BrowserListEntry {
@@ -1874,6 +2967,12 @@ pub struct BrowserListEntry {
     pub node_id: i32,
     pub title: QString,
     pub artist: QString,
+    pub original_artist: QString,
+    pub remixer: QString,
+    pub label: QString,
+    pub album: QString,
+    pub genre: QString,
+    pub key: QString,
     pub duration: i64, // nanoseconds
     pub bpm: f32,
 }
@@ -1905,6 +3004,15 @@ impl qobject::BrowserListModel {
         roles.insert(BROWSER_LIST_MODEL_TITLE_ROLE, QByteArray::from("title"));
         roles.insert(BROWSER_LIST_MODEL_ARTIST_ROLE, QByteArray::from("artist"));
         roles.insert(
+            BROWSER_LIST_MODEL_ORIGINAL_ARTIST_ROLE,
+            QByteArray::from("original_artist"),
+        );
+        roles.insert(BROWSER_LIST_MODEL_REMIXER_ROLE, QByteArray::from("remixer"));
+        roles.insert(BROWSER_LIST_MODEL_LABEL_ROLE, QByteArray::from("label"));
+        roles.insert(BROWSER_LIST_MODEL_ALBUM_ROLE, QByteArray::from("album"));
+        roles.insert(BROWSER_LIST_MODEL_GENRE_ROLE, QByteArray::from("genre"));
+        roles.insert(BROWSER_LIST_MODEL_KEY_ROLE, QByteArray::from("key"));
+        roles.insert(
             BROWSER_LIST_MODEL_DURATION_ROLE,
             QByteArray::from("duration"),
         );
@@ -1925,6 +3033,14 @@ impl qobject::BrowserListModel {
             Some(item) if role == BROWSER_LIST_MODEL_NODE_ID_ROLE => QVariant::from(&item.node_id),
             Some(item) if role == BROWSER_LIST_MODEL_TITLE_ROLE => QVariant::from(&item.title),
             Some(item) if role == BROWSER_LIST_MODEL_ARTIST_ROLE => QVariant::from(&item.artist),
+            Some(item) if role == BROWSER_LIST_MODEL_ORIGINAL_ARTIST_ROLE => {
+                QVariant::from(&item.original_artist)
+            }
+            Some(item) if role == BROWSER_LIST_MODEL_REMIXER_ROLE => QVariant::from(&item.remixer),
+            Some(item) if role == BROWSER_LIST_MODEL_LABEL_ROLE => QVariant::from(&item.label),
+            Some(item) if role == BROWSER_LIST_MODEL_ALBUM_ROLE => QVariant::from(&item.album),
+            Some(item) if role == BROWSER_LIST_MODEL_GENRE_ROLE => QVariant::from(&item.genre),
+            Some(item) if role == BROWSER_LIST_MODEL_KEY_ROLE => QVariant::from(&item.key),
             Some(item) if role == BROWSER_LIST_MODEL_DURATION_ROLE => {
                 QVariant::from(&item.duration)
             }

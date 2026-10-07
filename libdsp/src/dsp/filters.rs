@@ -374,9 +374,9 @@ impl<const COOKBOOK_BANDWIDTH: bool> BiquadStatic<f32, COOKBOOK_BANDWIDTH> {
     }
 
     pub fn process(&mut self, x0: f32) -> f32 {
-        let y0 = x0 * self.b0 + self.x1 * self.b1 + self.x2 * self.b2
-            - self.y1 * self.a1
-            - self.y2 * self.a2;
+        let y0 = (x0 * self.b0) + (self.x1 * self.b1) + (self.x2 * self.b2)
+            - (self.y1 * self.a1)
+            - (self.y2 * self.a2);
 
         self.y2 = self.y1;
         self.y1 = y0;

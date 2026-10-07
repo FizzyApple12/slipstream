@@ -1479,6 +1479,7 @@ name = "libdsp"
 version = "0.0.1"
 dependencies = [
  "bytemuck",
+ "log",
  "num",
  "num-complex",
  "rand",
@@ -1497,6 +1498,8 @@ dependencies = [
  "base64",
  "interprocess",
  "libdj",
+ "libdsp",
+ "log",
  "loop_unwrap",
  "midir",
  "rkyv",
