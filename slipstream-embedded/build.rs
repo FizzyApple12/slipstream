@@ -32,7 +32,7 @@ fn main() {
     // if something is wrong
     unsafe {
         CxxQtBuilder::new_qml_module(
-            QmlModule::new("engineering.fizzy.deck_application").qml_files(vec![
+            QmlModule::new("engineering.fizzy.slipstream_embedded").qml_files(vec![
                 "qml/root.qml",
                 "qml/main/MainWindow.qml",
                 "qml/main/browser/SourceSelect.qml",

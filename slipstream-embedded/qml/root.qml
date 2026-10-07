@@ -3,7 +3,7 @@ import QtQuick 2.3
 import "./main"
 import "./mixer"
 
-import engineering.fizzy.deck_application
+import engineering.fizzy.slipstream_embedded
 
 MainWindow {
     id: main_window

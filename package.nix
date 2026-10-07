@@ -32,7 +32,7 @@ let
   };
 in
 rustPlatform.buildRustPackage {
-  pname = "deck-application";
+  pname = "slipstream-embedded";
   version = "1.0.0";
   src = lib.cleanSource ./.;
 
@@ -88,7 +88,7 @@ rustPlatform.buildRustPackage {
     description = "DJ Deck Application for Embedded Systems";
     homepage = "https://github.com/fizzyapple12/djdeck";
     maintainers = with lib.maintainers; [ fizzyapple12 ];
-    mainProgram = "deck-application";
+    mainProgram = "slipstream-embedded";
     platforms = lib.platforms.all;
   };
 }

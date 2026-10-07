@@ -28,14 +28,14 @@
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
       in rec {
-        nixosConfigurations.djdeck = import ./deckos {
+        nixosConfigurations.djdeck = import ./slipstreamos {
           inputs = inputs;
           nixos-raspberrypi = nixos-raspberrypi;
         };
 
         packages = {
-          deckos = nixosConfigurations.djdeck.config.system.build.sdImage;
-          deck-application = pkgs.callPackage ./package.nix {};
+          slipstreamos = nixosConfigurations.djdeck.config.system.build.sdImage;
+          slipstream-embedded = pkgs.callPackage ./package.nix {};
         };
 
         devShells.default = let

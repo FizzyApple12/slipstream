@@ -840,29 +840,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
-name = "deck-application"
-version = "0.0.1"
-dependencies = [
- "cc",
- "cxx",
- "cxx-qt",
- "cxx-qt-build",
- "cxx-qt-lib",
- "fern",
- "humantime",
- "libdatabase",
- "libdj",
- "libdsp",
- "libio",
- "log",
- "qt-build-utils",
- "thiserror 2.0.18",
- "timecode",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
 name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2582,6 +2559,29 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "slipstream-embedded"
+version = "0.0.1"
+dependencies = [
+ "cc",
+ "cxx",
+ "cxx-qt",
+ "cxx-qt-build",
+ "cxx-qt-lib",
+ "fern",
+ "humantime",
+ "libdatabase",
+ "libdj",
+ "libdsp",
+ "libio",
+ "log",
+ "qt-build-utils",
+ "thiserror 2.0.18",
+ "timecode",
+ "tokio",
+ "tokio-stream",
+]
 
 [[package]]
 name = "smallvec"

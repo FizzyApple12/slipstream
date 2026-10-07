@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Window
 import QtQuick.VirtualKeyboard
 
-import engineering.fizzy.deck_application
+import engineering.fizzy.slipstream_embedded
 
 import "./player"
 import "./layouts"

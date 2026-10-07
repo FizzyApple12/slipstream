@@ -42,7 +42,7 @@ impl Controller {
     pub fn open_midi_input(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (midi_sender, midi_receiver) = tokio::sync::mpsc::unbounded_channel::<MidiMessage>();
 
-        let midi_in = MidiInput::new("dj-deck-midi-input")?;
+        let midi_in = MidiInput::new("slipstream-midi-input")?;
 
         let ports = midi_in.ports();
 
@@ -80,7 +80,7 @@ impl Controller {
         let (midi_sender, mut midi_receiver) =
             tokio::sync::mpsc::unbounded_channel::<MidiMessage>();
 
-        let midi_out = MidiOutput::new("dj-deck-midi-output")?;
+        let midi_out = MidiOutput::new("slipstream-midi-output")?;
 
         let ports = midi_out.ports();
 

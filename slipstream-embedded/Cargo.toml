@@ -1,5 +1,5 @@
 [package]
-name = "deck-application"
+name = "slipstream-embedded"
 version.workspace = true
 edition.workspace = true
 

@@ -150,7 +150,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(engine) = engine.as_mut() {
         engine.load(&QUrl::from(
-            "qrc:/qt/qml/engineering/fizzy/deck_application/qml/root.qml",
+            "qrc:/qt/qml/engineering/fizzy/slipstream_embedded/qml/root.qml",
         ));
     }
 

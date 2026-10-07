@@ -104,11 +104,11 @@ nixos-raspberrypi.lib.nixosSystem {
     ({ nixpkgs, ... }: let
       system = "aarch64-linux";
       pkgs = import nixpkgs { inherit system; };
-      deck-application = (pkgs.callPackage ../package.nix {});
+      slipstream-embedded = (pkgs.callPackage ../package.nix {});
     in {
       environment = {
         systemPackages = [
-          deck-application
+          slipstream-embedded
           pkgs.cage
         ];
       };
@@ -159,7 +159,7 @@ nixos-raspberrypi.lib.nixosSystem {
             "-d"
             "-m extend"
           ];
-          program = "${deck-application.outPath}/bin/deck-application";
+          program = "${slipstream-embedded.outPath}/bin/slipstream-embedded";
           user = "dj";
         };
       };

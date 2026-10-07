@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 
-import engineering.fizzy.deck_application
+import engineering.fizzy.slipstream_embedded
 
 import "qrc:/test_images"
 import "qrc:/shaders"

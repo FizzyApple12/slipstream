@@ -50,4 +50,4 @@ rc1 todos:
 * track streaming support
 * stems support
 * stems splitter
-* make final deckos distribution
+* make final slipstreamOS distribution
