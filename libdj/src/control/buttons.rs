@@ -3,8 +3,8 @@ use timecode::{Duration, Timecode};
 use crate::{
     MIN_LOOP_SIZE_NANOSECONDS,
     types::deck::{
-        BeatLoopAdjustMode, BeatSyncMode, CrossFaderSide, DeckState, MasterFXChannel, PlayState,
-        TempoRange,
+        BeatLoopAdjustMode, BeatSyncMode, CrossFaderSide, DeckState, MasterFXChannel,
+        PlayDirection, PlayState, TempoRange,
     },
 };
 
@@ -81,17 +81,33 @@ pub fn player_play_press(deck_state: &mut DeckState, channel: usize) {
 
 pub fn player_reverse_press(deck_state: &mut DeckState, channel: usize) {
     if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
-        channel.player.reverse_enabled = true;
+        channel.player.play_direction = PlayDirection::Reverse;
     }
 }
 
 pub fn player_reverse_release(deck_state: &mut DeckState, channel: usize) {
     if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
-        if channel.player.slip_playing {
+        if channel.player.play_direction == PlayDirection::SlipReverse {
             channel.player.time = channel.player.slip_time;
         }
 
-        channel.player.reverse_enabled = false;
+        channel.player.play_direction = PlayDirection::Forward;
+    }
+}
+
+pub fn player_slip_reverse_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        channel.player.play_direction = PlayDirection::SlipReverse;
+    }
+}
+
+pub fn player_slip_reverse_release(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        if channel.player.play_direction == PlayDirection::SlipReverse {
+            channel.player.time = channel.player.slip_time;
+        }
+
+        channel.player.play_direction = PlayDirection::Forward;
     }
 }
 

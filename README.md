@@ -8,8 +8,11 @@ rc1 todos:
 * finish button bindings
 * rearchitect the audio pipeline
 	* arena, nesting, proc macro
-* build a custom Phase Vocoder around RustFFT
-* fill in filter coefficients based on https://vicanek.de/articles/BiquadFits.pdf
+	* build a custom Phase Vocoder around RustFFT
+	* fill in filter coefficients based on https://vicanek.de/articles/BiquadFits.pdf
+* rearchitect the dj engine
+	* modular bus structured as virtual players and mixers
+	* segment control and communication to a flat architecture instead of a top-down architecture
 * effects:
 	* low cut echo
 	* echo
@@ -40,6 +43,7 @@ rc1 todos:
 * player io board firmware
 
 1.0 todos:
+* interactive bpm tap analysis
 * pro dj link
 * onelibrary support + deduplication with old rekordbox format
 * usb library switching (for multiple libraries)
@@ -51,3 +55,4 @@ rc1 todos:
 * stems support
 * stems splitter
 * make final slipstreamOS distribution
+* dj engine builder

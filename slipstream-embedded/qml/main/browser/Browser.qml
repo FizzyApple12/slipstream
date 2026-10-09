@@ -948,14 +948,14 @@ FlexboxLayout {
 
                             background: Rectangle {color: palette.light}
 
-                            onClicked: () => {
-                            	if (delegate_root.entry_type != BrowserEntryType.Playlist) {
+                            onClicked: {
+                            	if (delegate_root.entry_type == BrowserEntryType.Playlist) {
                              		root.engine.push_playlist_node(delegate_root.node_id);
-                             	} else if (delegate_root.entry_type != BrowserEntryType.Artist) {
+                             	} else if (delegate_root.entry_type == BrowserEntryType.Artist) {
                               		root.engine.select_artist(delegate_root.node_id);
-                              	} else if (delegate_root.entry_type != BrowserEntryType.Album) {
+                              	} else if (delegate_root.entry_type == BrowserEntryType.Album) {
                                		root.engine.select_album(delegate_root.node_id);
-                               	} else if (delegate_root.entry_type != BrowserEntryType.Key) {
+                               	} else if (delegate_root.entry_type == BrowserEntryType.Key) {
                                 	root.engine.select_key(delegate_root.node_id);
                                 }
                             }

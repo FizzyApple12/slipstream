@@ -8,7 +8,7 @@ use crate::{
     },
     types::{
         analysis::Beat,
-        deck::{BeatLoopAdjustMode, BeatSyncMode, PlayState, PlayerState},
+        deck::{BeatLoopAdjustMode, BeatSyncMode, PlayDirection, PlayState, PlayerState},
     },
 };
 
@@ -23,8 +23,21 @@ pub struct PlayerUpdateResults {
 
 impl PlayerState {
     pub fn is_valid_master(&self) -> bool {
-        !(self.play_state == PlayState::Stop
-            || (self.reverse_enabled && !self.slip_playing)
+        let Some(track_analysis) = &self.current_track_analysis else {
+            return false;
+        };
+
+        let Some(last_beat) = track_analysis.beat_grid.last() else {
+            return false;
+        };
+
+        !(self.current_track.is_none()
+            || self.current_track_analysis.is_none()
+            || self.time < Timecode::zero()
+            || self.time > last_beat.time
+            || self.play_state == PlayState::Stop
+            || self.play_direction != PlayDirection::Forward
+            || !self.slip_playing
             || self.jog_hold
             || self.jog_wait
             || !(-f32::EPSILON..=f32::EPSILON).contains(&self.jog_velocity))
@@ -41,7 +54,7 @@ impl PlayerState {
         if self.jog_wait && (-f32::EPSILON..=f32::EPSILON).contains(&self.jog_velocity) {
             self.jog_wait = false;
 
-            if self.slip_playing {
+            if self.slip_playing || self.play_direction == PlayDirection::SlipReverse {
                 self.time = self.slip_time;
             }
         }
@@ -214,7 +227,7 @@ impl PlayerState {
 
                 self.slip_playing = self.slip;
 
-                if self.reverse_enabled {
+                if self.play_direction != PlayDirection::Forward {
                     self.time -= track_time_delta + pitch_time;
                 } else if self.beat_sync == BeatSyncMode::BeatSync
                     && let Some(ref track_analysis) = self.current_track_analysis
@@ -260,7 +273,7 @@ impl PlayerState {
 
                 self.slip_playing = false;
 
-                if self.reverse_enabled {
+                if self.play_direction != PlayDirection::Forward {
                     self.time -= track_time_delta + pitch_time;
                 } else if self.beat_sync == BeatSyncMode::BeatSync
                     && let Some(ref track_analysis) = self.current_track_analysis
@@ -286,9 +299,9 @@ impl PlayerState {
 
         // calculate track slip movement
 
-        if self.slip_playing {
-            match (self.play_state, jog_being_held, self.reverse_enabled) {
-                (PlayState::Stop, _, _) | (_, true, _) | (_, _, true) => {
+        if self.slip_playing || self.play_direction == PlayDirection::SlipReverse {
+            match (self.play_state, jog_being_held) {
+                (PlayState::Stop, _) | (_, true) => {
                     if self.beat_sync == BeatSyncMode::BeatSync
                         && let Some(ref track_analysis) = self.current_track_analysis
                         && let Some((master_beat_grid, master_time, master_tempo_percent)) =
@@ -309,8 +322,12 @@ impl PlayerState {
                         self.slip_time += track_time_delta;
                     }
                 }
-                (PlayState::Play | PlayState::Cue, false, false) => {
-                    self.slip_time = self.time;
+                (PlayState::Play | PlayState::Cue, false) => {
+                    if self.play_direction == PlayDirection::SlipReverse {
+                        self.slip_time += track_time_delta;
+                    } else {
+                        self.slip_time = self.time;
+                    }
                 }
             }
         } else {

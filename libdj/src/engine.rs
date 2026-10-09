@@ -5,6 +5,7 @@ use std::{
 
 use libdsp::audio_loader::TrackAudioData;
 use thiserror::Error;
+use tokio::{sync::watch::Ref, task::JoinHandle};
 
 use crate::{
     audio::{
@@ -12,9 +13,8 @@ use crate::{
         AudioSystem, AudioSystemChannels, FindDeviceError,
     },
     types::{
-        bindings::{DeckControlEvent, UIControlEvent},
+        control::{DeckControlEvent, DeckUpdateEvent},
         deck::DeckState,
-        playback::DeckUpdate,
     },
 };
 
@@ -56,33 +56,97 @@ pub enum DJEngineRuntimeStatus {
     AudioRuntimeError(AudioPipelineRuntimeError),
 }
 
-pub struct DJEngine {
+#[derive(Clone)]
+pub struct DJEngineHandle {
     runtime_state_receiver: tokio::sync::watch::Receiver<DJEngineRuntimeStatus>,
+    deck_state_receiver: tokio::sync::watch::Receiver<DeckState>,
+
+    deck_update_sender: tokio::sync::mpsc::UnboundedSender<DeckUpdateEvent>,
+    control_event_sender: tokio::sync::mpsc::UnboundedSender<DeckControlEvent>,
+
+    loaded_track_sender: tokio::sync::mpsc::UnboundedSender<(usize, Option<Box<TrackAudioData>>)>,
+}
+
+impl DJEngineHandle {
+    pub async fn wait_for_new_deck_state_changed(&mut self) {
+        let _ = self.deck_state_receiver.changed().await;
+    }
+
+    pub async fn wait_for_new_deck_state(&mut self) -> Ref<'_, DeckState> {
+        let _ = self.deck_state_receiver.changed().await;
+
+        self.deck_state_receiver.borrow_and_update()
+    }
+
+    pub fn deck_state_changed(&self) -> bool {
+        self.deck_state_receiver.has_changed().unwrap_or(false)
+    }
+
+    pub fn get_deck_state(&mut self) -> Ref<'_, DeckState> {
+        self.deck_state_receiver.borrow_and_update()
+    }
+
+    pub async fn wait_for_new_status(&mut self) -> DJEngineRuntimeStatus {
+        let _ = self.runtime_state_receiver.changed().await;
+
+        *self.runtime_state_receiver.borrow_and_update()
+    }
+
+    pub fn status_changed(&self) -> bool {
+        self.runtime_state_receiver.has_changed().unwrap_or(false)
+    }
+
+    pub fn get_status(&mut self) -> DJEngineRuntimeStatus {
+        *self.runtime_state_receiver.borrow_and_update()
+    }
+
+    pub fn send_update_event(&self, update_event: DeckUpdateEvent) {
+        let _ = self.deck_update_sender.send(update_event);
+    }
+
+    pub fn send_control_event(&self, control_event: DeckControlEvent) {
+        let _ = self.control_event_sender.send(control_event);
+    }
+
+    pub fn send_loaded_track(&self, channel: usize, track_audio_data: Option<Box<TrackAudioData>>) {
+        let _ = self.loaded_track_sender.send((channel, track_audio_data));
+    }
+}
+
+pub struct DJEngine {
+    manager_handle: JoinHandle<()>,
+
+    runtime_state_receiver: tokio::sync::watch::Receiver<DJEngineRuntimeStatus>,
+    deck_state_receiver: tokio::sync::watch::Receiver<DeckState>,
+
+    deck_update_sender: tokio::sync::mpsc::UnboundedSender<DeckUpdateEvent>,
+    control_event_sender: tokio::sync::mpsc::UnboundedSender<DeckControlEvent>,
+
+    loaded_track_sender: tokio::sync::mpsc::UnboundedSender<(usize, Option<Box<TrackAudioData>>)>,
 }
 
 impl DJEngine {
-    pub fn start(
-        control_event_receiver: tokio::sync::mpsc::UnboundedReceiver<DeckControlEvent>,
-        control_event_sender: tokio::sync::mpsc::UnboundedSender<UIControlEvent>,
-        deck_update_receiver: tokio::sync::mpsc::UnboundedReceiver<DeckUpdate>,
-        deck_state_sender: tokio::sync::watch::Sender<DeckState>,
-        loaded_track_receiver: tokio::sync::mpsc::UnboundedReceiver<(
-            usize,
-            Option<Box<TrackAudioData>>,
-        )>,
-    ) -> Self {
+    // this will be replaced in the future with a proper DJ Engine builder
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let (deck_state_sender, deck_state_receiver) =
+            tokio::sync::watch::channel(DeckState::default());
+        let (control_event_sender, control_event_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (deck_update_sender, deck_update_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (loaded_track_sender, loaded_track_receiver) = tokio::sync::mpsc::unbounded_channel();
+
         let (runtime_state_sender, runtime_state_receiver) =
             tokio::sync::watch::channel(DJEngineRuntimeStatus::AudioInitialising);
 
         let channels = Arc::new(RwLock::new(AudioSystemChannels {
-            control_event_receiver,
-            control_event_sender,
-            deck_update_receiver,
             deck_state_sender,
+            control_event_sender: control_event_sender.clone(),
+            control_event_receiver,
+            deck_update_receiver,
             loaded_track_receiver,
         }));
 
-        tokio::task::spawn(async move {
+        let manager_handle = tokio::task::spawn(async move {
             'system_loop: loop {
                 let _ = runtime_state_sender.send(DJEngineRuntimeStatus::AudioInitialising);
 
@@ -181,13 +245,71 @@ impl DJEngine {
         });
 
         DJEngine {
+            manager_handle,
+
             runtime_state_receiver,
+            deck_state_receiver,
+
+            deck_update_sender,
+            control_event_sender,
+
+            loaded_track_sender,
         }
+    }
+
+    pub fn subscribe(&self) -> DJEngineHandle {
+        DJEngineHandle {
+            runtime_state_receiver: self.runtime_state_receiver.clone(),
+            deck_state_receiver: self.deck_state_receiver.clone(),
+            deck_update_sender: self.deck_update_sender.clone(),
+            control_event_sender: self.control_event_sender.clone(),
+            loaded_track_sender: self.loaded_track_sender.clone(),
+        }
+    }
+
+    pub async fn wait_for_new_deck_state(&mut self) -> Ref<'_, DeckState> {
+        let _ = self.deck_state_receiver.changed().await;
+
+        self.deck_state_receiver.borrow_and_update()
+    }
+
+    pub fn deck_state_changed(&self) -> bool {
+        self.deck_state_receiver.has_changed().unwrap_or(false)
+    }
+
+    pub fn get_deck_state(&mut self) -> Ref<'_, DeckState> {
+        self.deck_state_receiver.borrow_and_update()
     }
 
     pub async fn wait_for_new_status(&mut self) -> DJEngineRuntimeStatus {
         let _ = self.runtime_state_receiver.changed().await;
 
         *self.runtime_state_receiver.borrow_and_update()
+    }
+
+    pub fn status_changed(&self) -> bool {
+        self.runtime_state_receiver.has_changed().unwrap_or(false)
+    }
+
+    pub fn get_status(&mut self) -> DJEngineRuntimeStatus {
+        *self.runtime_state_receiver.borrow_and_update()
+    }
+
+    pub fn send_update_event(&self, update_event: DeckUpdateEvent) {
+        let _ = self.deck_update_sender.send(update_event);
+    }
+
+    pub fn send_control_event(&self, control_event: DeckControlEvent) {
+        let _ = self.control_event_sender.send(control_event);
+    }
+
+    pub fn send_loaded_track(&self, channel: usize, track_audio_data: Option<Box<TrackAudioData>>) {
+        let _ = self.loaded_track_sender.send((channel, track_audio_data));
+    }
+}
+
+impl Drop for DJEngine {
+    fn drop(&mut self) {
+        self.manager_handle.abort();
     }
 }

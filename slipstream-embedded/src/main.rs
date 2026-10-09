@@ -1,4 +1,5 @@
 pub mod components;
+pub mod event_mapper;
 pub mod logger;
 pub mod statuses;
 pub mod waveform_loader;
@@ -7,13 +8,14 @@ use std::{array, pin::Pin};
 
 use cxx_qt_lib::{QFont, QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 use libdatabase::device_manager::DeviceManager;
-use libdj::{AUDIO_CHANNELS, engine::DJEngine, types::deck::DeckState};
+use libdj::{AUDIO_CHANNELS, engine::DJEngine};
 use libio::{controller::Controller, types::controller::ControllerMessage};
 use log::{debug, info, warn};
 use tokio::task;
 
 use crate::{
     components::{engine_bridge::EngineBridgeRust, ffi::set_qfont_feature},
+    event_mapper::{MappedEvent, map_controller_event},
     logger::setup_logger,
 };
 
@@ -35,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     debug!("Starting IO Manager...");
 
-    let (deck_control_event_sender, deck_control_event_receiver) =
+    let (controller_event_sender, mut controller_event_receiver) =
         tokio::sync::mpsc::unbounded_channel();
 
     // todo: this needs to be replaced with a proper io manager
@@ -51,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             break 'controller_init;
         }
 
-        if let Err(err) = controller.start(deck_control_event_sender) {
+        if let Err(err) = controller.start(controller_event_sender) {
             warn!("Failed to start MIDI processing, MIDI has been disabled: {err}");
             break 'controller_init;
         }
@@ -66,47 +68,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     debug!("Starting DJ Engine...");
 
-    let (deck_state_sender, deck_state_receiver) =
-        tokio::sync::watch::channel(DeckState::default());
-    let (deck_update_sender, deck_update_receiver) = tokio::sync::mpsc::unbounded_channel();
-    let (loaded_track_sender, loaded_track_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let dj_engine = DJEngine::new();
+
+    let mut relay_engine_handle = dj_engine.subscribe();
 
     let (ui_control_event_sender, ui_control_event_receiver) =
         tokio::sync::mpsc::unbounded_channel();
 
-    let dj_engine = DJEngine::start(
-        deck_control_event_receiver,
-        ui_control_event_sender,
-        deck_update_receiver,
-        deck_state_sender,
-        loaded_track_receiver,
-    );
-
-    let mut controller_deck_state_updater = deck_state_receiver.clone();
-
     task::spawn(async move {
         loop {
-            let _ = controller_deck_state_updater.changed().await;
+            tokio::select! {
+                controller_event = controller_event_receiver.recv() => {
+                    if let Some(event) = controller_event {
+                        match map_controller_event(event) {
+                            MappedEvent::UIControlEvent(ui_control_event) => {
+                                let _ = ui_control_event_sender.send(ui_control_event);
+                            },
+                            MappedEvent::DeckControlEvent(deck_control_event) => {
+                                relay_engine_handle.send_control_event(deck_control_event);
+                            },
+                        }
+                    }
+                }
+                _ = relay_engine_handle.wait_for_new_deck_state_changed() => {
+                    let new_deck_state = relay_engine_handle.get_deck_state().clone();
 
-            let new_deck_state = controller_deck_state_updater.borrow_and_update().clone();
+                    #[allow(clippy::cast_precision_loss)]
+                    let _ = controller.send(ControllerMessage::UpdateCurrentSamples(array::from_fn(
+                        |index| {
+                            new_deck_state
+                                .mixer_channels
+                                .get(index)
+                                .map_or(0.0, |channel| {
+                                    channel
+                                        .average_amplitude
+                                        .iter()
+                                        .fold(0.0, |accumulator, amplitude| accumulator + amplitude)
+                                        / AUDIO_CHANNELS as f32
+                                })
+                        },
+                    )));
 
-            #[allow(clippy::cast_precision_loss)]
-            let _ = controller.send(ControllerMessage::UpdateCurrentSamples(array::from_fn(
-                |index| {
-                    new_deck_state
-                        .mixer_channels
-                        .get(index)
-                        .map_or(0.0, |channel| {
-                            channel
-                                .average_amplitude
-                                .iter()
-                                .fold(0.0, |accumulator, amplitude| accumulator + amplitude)
-                                / AUDIO_CHANNELS as f32
-                        })
-                },
-            )));
-
-            let _ = controller.send(ControllerMessage::UpdateDeckState(new_deck_state));
+                    let _ = controller.send(ControllerMessage::UpdateDeckState(new_deck_state));
+                }
+            }
         }
     });
 
@@ -115,13 +120,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let handle = runtime.handle().clone();
 
     EngineBridgeRust::register(
-        handle,
-        dj_engine,
-        deck_state_receiver,
-        deck_update_sender,
-        ui_control_event_receiver,
-        loaded_track_sender,
+        dj_engine.subscribe(),
         device_manager,
+        ui_control_event_receiver,
+        handle,
     );
 
     unsafe {

@@ -18,7 +18,7 @@ use rkyv::{
 #[cfg(feature = "full")]
 pub mod audio;
 #[cfg(feature = "full")]
-pub mod bindings;
+pub mod control;
 #[cfg(feature = "full")]
 pub mod math;
 #[cfg(feature = "full")]

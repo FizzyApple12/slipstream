@@ -1,16 +1,14 @@
 use std::{collections::BTreeMap, time::Duration};
 
-use libdj::types::{
-    bindings::DeckControlEvent,
-    deck::{BeatLoopAdjustMode, BeatSyncMode, DeckState, PlayState},
-};
+use libdj::types::deck::{BeatLoopAdjustMode, BeatSyncMode, DeckState, PlayDirection, PlayState};
 use libdsp::amplitude_to_db;
 use loop_unwrap::{ToOption, unwrap_continue};
 use midir::{MidiInput, MidiInputConnection, MidiOutput};
 use thiserror::Error;
+use timecode::Timecode;
 use tokio::task::JoinHandle;
 
-use crate::types::controller::ControllerMessage;
+use crate::types::controller::{ControllerEvent, ControllerMessage};
 
 pub type MidiMessage = [u8; 3];
 
@@ -113,7 +111,7 @@ impl Controller {
 
     pub fn start(
         &mut self,
-        deck_control_event_sender: tokio::sync::mpsc::UnboundedSender<DeckControlEvent>,
+        deck_control_event_sender: tokio::sync::mpsc::UnboundedSender<ControllerEvent>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let midi_sender = self.midi_sender.clone();
         let mut midi_receiver = self
@@ -293,9 +291,9 @@ const MIDI_MAPPING: &str = include_str!("../../ddj-flx10.txt");
 #[allow(clippy::type_complexity)]
 #[derive(Debug)]
 pub struct MidiMapping {
-    direct: BTreeMap<u16, Vec<(MappingTarget, DeckControlEvent)>>,
-    direct_equals: BTreeMap<u16, Vec<(usize, MappingTarget, DeckControlEvent)>>,
-    integrated: [BTreeMap<u16, Vec<(MappingTarget, DeckControlEvent)>>; 4],
+    direct: BTreeMap<u16, Vec<(MappingTarget, ControllerEvent)>>,
+    direct_equals: BTreeMap<u16, Vec<(usize, MappingTarget, ControllerEvent)>>,
+    integrated: [BTreeMap<u16, Vec<(MappingTarget, ControllerEvent)>>; 4],
 }
 
 #[derive(Debug)]
@@ -528,7 +526,7 @@ fn load_midi_mapping() -> MidiMapping {
             }
         }
 
-        let event = unwrap_continue!(DeckControlEvent::from_str(&event_name));
+        let event = unwrap_continue!(ControllerEvent::from_str(&event_name));
 
         match channel_type {
             ChannelType::Direct => {
@@ -567,7 +565,7 @@ fn process_midi_command(
     value: u8,
     mappings: &MidiMapping,
     persistence_store: &mut BTreeMap<(&str, usize), (u8, u8)>,
-    deck_control_event_sender: &tokio::sync::mpsc::UnboundedSender<DeckControlEvent>,
+    deck_control_event_sender: &tokio::sync::mpsc::UnboundedSender<ControllerEvent>,
 ) {
     if let Some(mappings) = mappings.direct.get(&address) {
         for (mapping_target, event) in mappings {
@@ -621,9 +619,9 @@ fn apply_mapping_to_event(
     value: u8,
     channel: usize,
     target: &MappingTarget,
-    event: DeckControlEvent,
+    event: ControllerEvent,
     persistence_store: &mut BTreeMap<(&str, usize), (u8, u8)>,
-) -> Option<DeckControlEvent> {
+) -> Option<ControllerEvent> {
     let mut new_position: f32 = 0.0;
     let mut new_velocity: f32 = 0.0;
     let mut new_delta: f32 = 0.0;
@@ -645,7 +643,7 @@ fn apply_mapping_to_event(
         }
         MappingTarget::Absolute(byte_position, min, max) => {
             let (msb, lsb) = if let Some((msb, lsb)) =
-                persistence_store.get_mut(&(DeckControlEvent::to_str(event), channel))
+                persistence_store.get_mut(&(ControllerEvent::to_str(event), channel))
             {
                 match byte_position {
                     BytePosition::MSB => {
@@ -663,7 +661,7 @@ fn apply_mapping_to_event(
                     BytePosition::LSB => (0, value),
                 };
 
-                persistence_store.insert((DeckControlEvent::to_str(event), channel), bytes);
+                persistence_store.insert((ControllerEvent::to_str(event), channel), bytes);
 
                 bytes
             };
@@ -693,101 +691,103 @@ fn apply_mapping_to_event(
     let mut new_event = event;
 
     match &mut new_event {
-        DeckControlEvent::BrowserEncoderPress
-        | DeckControlEvent::BrowserSourcePress
-        | DeckControlEvent::BrowserBrowsePress
-        | DeckControlEvent::BrowserPlaylistPress
-        | DeckControlEvent::BrowserBackPress
-        | DeckControlEvent::MixerMasterFXEnablePress
-        | DeckControlEvent::BrowserSearchPress
-        | DeckControlEvent::MixerMasterCuePress
-        | DeckControlEvent::MixerMasterFXSelectTouchPress
-        | DeckControlEvent::MixerMasterFXSelectTouchRelease
-        | DeckControlEvent::MixerMasterFXParameterSelectPress
-        | DeckControlEvent::MixerMasterFXBPMSelectPress
-        | DeckControlEvent::MixerChannelFXProximityPress
-        | DeckControlEvent::MixerChannelFXProximityRelease
-        | DeckControlEvent::MixerMasterMasterFXTargetPress => {}
+        ControllerEvent::BrowserEncoderPress
+        | ControllerEvent::BrowserSourcePress
+        | ControllerEvent::BrowserBrowsePress
+        | ControllerEvent::BrowserPlaylistPress
+        | ControllerEvent::BrowserBackPress
+        | ControllerEvent::MixerMasterFXEnablePress
+        | ControllerEvent::BrowserSearchPress
+        | ControllerEvent::MixerMasterCuePress
+        | ControllerEvent::MixerMasterFXSelectTouchPress
+        | ControllerEvent::MixerMasterFXSelectTouchRelease
+        | ControllerEvent::MixerMasterFXParameterSelectPress
+        | ControllerEvent::MixerMasterFXBPMSelectPress
+        | ControllerEvent::MixerChannelFXProximityPress
+        | ControllerEvent::MixerChannelFXProximityRelease
+        | ControllerEvent::MixerMasterMasterFXTargetPress => {}
 
-        DeckControlEvent::BrowserEncoderAdjust { delta }
-        | DeckControlEvent::MixerMasterFXSelect { delta }
-        | DeckControlEvent::MixerMasterFXParameterAdjust { delta }
-        | DeckControlEvent::MixerMasterFXBPMAdjust { delta } => {
+        ControllerEvent::BrowserEncoderAdjust { delta }
+        | ControllerEvent::MixerMasterFXSelect { delta }
+        | ControllerEvent::MixerMasterFXParameterAdjust { delta }
+        | ControllerEvent::MixerMasterFXBPMAdjust { delta } => {
             *delta = new_delta;
         }
 
-        DeckControlEvent::PlayerPlayPress { channel }
-        | DeckControlEvent::PlayerCuePress { channel }
-        | DeckControlEvent::PlayerCueRelease { channel }
-        | DeckControlEvent::PlayerAltCuePress { channel }
-        | DeckControlEvent::PlayerAltCueRelease { channel }
-        | DeckControlEvent::PlayerBeatJumpBackwardRelease { channel }
-        | DeckControlEvent::PlayerLongBeatJumpBackwardRelease { channel }
-        | DeckControlEvent::PlayerBeatJumpForwardRelease { channel }
-        | DeckControlEvent::PlayerLongBeatJumpForwardRelease { channel }
-        | DeckControlEvent::PlayerBeatSyncPress { channel }
-        | DeckControlEvent::PlayerMasterPress { channel }
-        | DeckControlEvent::PlayerTempoResetPress { channel }
-        | DeckControlEvent::PlayerTempoRangePress { channel }
-        | DeckControlEvent::PlayerMasterTempoPress { channel }
-        | DeckControlEvent::PlayerJogTouchPress { channel }
-        | DeckControlEvent::PlayerJogTouchRelease { channel }
-        | DeckControlEvent::MixerChannelCuePress { channel }
-        | DeckControlEvent::MixerChannelCrossfaderAssignAPress { channel }
-        | DeckControlEvent::MixerChannelCrossfaderAssignNonePress { channel }
-        | DeckControlEvent::MixerChannelCrossfaderAssignBPress { channel }
-        | DeckControlEvent::PlayerQuantizePress { channel }
-        | DeckControlEvent::PlayerSlipPress { channel }
-        | DeckControlEvent::PlayerReversePress { channel }
-        | DeckControlEvent::PlayerReverseRelease { channel }
-        | DeckControlEvent::PlayerBPMSyncPress { channel }
-        | DeckControlEvent::PlayerKeySyncPress { channel }
-        | DeckControlEvent::PlayerBeatLoopInPress { channel }
-        | DeckControlEvent::PlayerBeatLoopInAdjustPress { channel }
-        | DeckControlEvent::PlayerBeatLoopOutPress { channel }
-        | DeckControlEvent::PlayerBeatLoopOutAdjustPress { channel }
-        | DeckControlEvent::PlayerBeatLoopExitPress { channel }
-        | DeckControlEvent::PlayerReLoopPress { channel }
-        | DeckControlEvent::PlayerInstantLoopPress { channel }
-        | DeckControlEvent::MixerChannelMasterFXTargetPress { channel } => {
+        ControllerEvent::PlayerPlayPress { channel }
+        | ControllerEvent::PlayerCuePress { channel }
+        | ControllerEvent::PlayerCueRelease { channel }
+        | ControllerEvent::PlayerAltCuePress { channel }
+        | ControllerEvent::PlayerAltCueRelease { channel }
+        | ControllerEvent::PlayerBeatJumpBackwardRelease { channel }
+        | ControllerEvent::PlayerLongBeatJumpBackwardRelease { channel }
+        | ControllerEvent::PlayerBeatJumpForwardRelease { channel }
+        | ControllerEvent::PlayerLongBeatJumpForwardRelease { channel }
+        | ControllerEvent::PlayerBeatSyncPress { channel }
+        | ControllerEvent::PlayerMasterPress { channel }
+        | ControllerEvent::PlayerTempoResetPress { channel }
+        | ControllerEvent::PlayerTempoRangePress { channel }
+        | ControllerEvent::PlayerMasterTempoPress { channel }
+        | ControllerEvent::PlayerJogTouchPress { channel }
+        | ControllerEvent::PlayerJogTouchRelease { channel }
+        | ControllerEvent::MixerChannelCuePress { channel }
+        | ControllerEvent::MixerChannelCrossfaderAssignAPress { channel }
+        | ControllerEvent::MixerChannelCrossfaderAssignNonePress { channel }
+        | ControllerEvent::MixerChannelCrossfaderAssignBPress { channel }
+        | ControllerEvent::PlayerQuantizePress { channel }
+        | ControllerEvent::PlayerSlipPress { channel }
+        | ControllerEvent::PlayerReversePress { channel }
+        | ControllerEvent::PlayerReverseRelease { channel }
+        | ControllerEvent::PlayerSlipReversePress { channel }
+        | ControllerEvent::PlayerSlipReverseRelease { channel }
+        | ControllerEvent::PlayerBPMSyncPress { channel }
+        | ControllerEvent::PlayerKeySyncPress { channel }
+        | ControllerEvent::PlayerBeatLoopInPress { channel }
+        | ControllerEvent::PlayerBeatLoopInAdjustPress { channel }
+        | ControllerEvent::PlayerBeatLoopOutPress { channel }
+        | ControllerEvent::PlayerBeatLoopOutAdjustPress { channel }
+        | ControllerEvent::PlayerBeatLoopExitPress { channel }
+        | ControllerEvent::PlayerReLoopPress { channel }
+        | ControllerEvent::PlayerInstantLoopPress { channel }
+        | ControllerEvent::MixerChannelMasterFXTargetPress { channel } => {
             *channel = new_channel;
         }
 
-        DeckControlEvent::PlayerJogVelocitySet { channel, velocity }
-        | DeckControlEvent::PlayerJogSearchVelocitySet { channel, velocity } => {
+        ControllerEvent::PlayerJogVelocitySet { channel, velocity }
+        | ControllerEvent::PlayerJogSearchVelocitySet { channel, velocity } => {
             *channel = new_channel;
             *velocity = new_velocity;
         }
 
-        DeckControlEvent::MixerChannelGainSet { channel, position }
-        | DeckControlEvent::MixerChannelEqHighSet { channel, position }
-        | DeckControlEvent::MixerChannelEqMidSet { channel, position }
-        | DeckControlEvent::MixerChannelEqLowSet { channel, position }
-        | DeckControlEvent::MixerChannelFXSet { channel, position }
-        | DeckControlEvent::PlayerTempoSet { channel, position }
-        | DeckControlEvent::MixerChannelFaderSet { channel, position } => {
+        ControllerEvent::MixerChannelGainSet { channel, position }
+        | ControllerEvent::MixerChannelEqHighSet { channel, position }
+        | ControllerEvent::MixerChannelEqMidSet { channel, position }
+        | ControllerEvent::MixerChannelEqLowSet { channel, position }
+        | ControllerEvent::MixerChannelFXSet { channel, position }
+        | ControllerEvent::PlayerTempoSet { channel, position }
+        | ControllerEvent::MixerChannelFaderSet { channel, position } => {
             *channel = new_channel;
             *position = new_position;
         }
 
-        DeckControlEvent::MixerHeadphonesMixSet { position }
-        | DeckControlEvent::MixerHeadphonesGainSet { position }
-        | DeckControlEvent::MixerMasterFXDepthSet { position }
-        | DeckControlEvent::MixerMasterGainSet { position }
-        | DeckControlEvent::MixerCrossfaderSet { position } => {
+        ControllerEvent::MixerHeadphonesMixSet { position }
+        | ControllerEvent::MixerHeadphonesGainSet { position }
+        | ControllerEvent::MixerMasterFXDepthSet { position }
+        | ControllerEvent::MixerMasterGainSet { position }
+        | ControllerEvent::MixerCrossfaderSet { position } => {
             *position = new_position;
         }
 
-        DeckControlEvent::PlayerPadPress { channel, number } => {
+        ControllerEvent::PlayerPadPress { channel, number } => {
             *channel = new_channel;
             *number = source_number;
         }
 
-        DeckControlEvent::MixerChannelFXPress { number } => {
+        ControllerEvent::MixerChannelFXPress { number } => {
             *number = source_number;
         }
 
-        DeckControlEvent::USBEjectPress { slot } | DeckControlEvent::USBEjectRelease { slot } => {
+        ControllerEvent::USBEjectPress { slot } | ControllerEvent::USBEjectRelease { slot } => {
             *slot = source_number;
         }
     }
@@ -893,7 +893,11 @@ fn set_deck_leds(
         let _ = midi_output.send(addr_channel_value_to_midi(
             0x9038,
             channel as u16,
-            if player_state.reverse_enabled { 127 } else { 0 },
+            if player_state.play_direction == PlayDirection::Forward {
+                0
+            } else {
+                127
+            },
         ));
 
         if is_loaded {
@@ -1104,27 +1108,51 @@ fn set_deck_leds(
         // --------- jog display stuff ---------
 
         // display on
-        // let _ = midi_output.send(addr_value_to_midi(
-        //     [0x9F5D, 0x9F5E, 0x9F5F, 0x9F60][channel],
-        //     0x00,
-        //     // if player_state.current_track.is_some() {
-        //     //     0x00
-        //     // } else {
-        //     //     0x7F
-        //     // },
-        // ));
+        let _ = midi_output.send(addr_value_to_midi(
+            [0x9F5D, 0x9F5E, 0x9F5F, 0x9F60][channel],
+            0x00,
+            // if player_state.current_track.is_some() {
+            //     0x00
+            // } else {
+            //     0x7F
+            // },
+        ));
 
         // jog illumination
-        // let _ = midi_output.send(addr_value_to_midi(
-        //     [0xBF09, 0xBF0A, 0xBF0B, 0xBF0C][channel],
-        //     if player_state.is_loading {
-        //         if flash_timers.fast { 0x01 } else { 0x00 }
-        //     } else if player_state.current_track.is_some() {
-        //         0x01
-        //     } else {
-        //         0x00
-        //     },
-        // ));
+        let color = if channel_state.fade > 0.00001 {
+            0x02
+        } else {
+            0x01
+        };
+
+        let _ = midi_output.send(addr_value_to_midi(
+            [0xBF09, 0xBF0A, 0xBF0B, 0xBF0C][channel],
+            if let Some((_, current_track)) = &player_state.current_track {
+                let reference_time = if let Some(track_analysis) =
+                    &player_state.current_track_analysis
+                    && let Some(last_beat) = track_analysis.beat_grid.last()
+                {
+                    last_beat.time
+                } else {
+                    Timecode::from_nanoseconds(current_track.duration)
+                };
+
+                if player_state.time >= reference_time || player_state.play_state == PlayState::Stop
+                {
+                    color
+                } else if player_state.time >= reference_time - timecode::Duration::from_seconds(15)
+                {
+                    if flash_timers.fast { color } else { 0x00 }
+                } else if player_state.time >= reference_time - timecode::Duration::from_seconds(30)
+                {
+                    if flash_timers.slow { color } else { 0x00 }
+                } else {
+                    color
+                }
+            } else {
+                0x00
+            },
+        ));
 
         // jog position
         // 1_800_000_000 for 33.3 rpm

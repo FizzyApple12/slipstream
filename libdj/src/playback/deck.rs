@@ -5,9 +5,8 @@ use crate::{
     playback::{channel::ChannelUpdateResults, player::PlayerUpdateResults},
     types::{
         analysis::Beat,
-        bindings::{DeckControlEvent, UIControlEvent},
+        control::{DeckControlEvent, DeckUpdateEvent},
         deck::{ChannelState, DeckState},
-        playback::DeckUpdate,
     },
 };
 
@@ -33,9 +32,9 @@ impl DeckState {
 
     pub fn update(
         &mut self,
+        control_event_sender: &mut tokio::sync::mpsc::UnboundedSender<DeckControlEvent>,
         control_event_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<DeckControlEvent>,
-        control_event_sender: &mut tokio::sync::mpsc::UnboundedSender<UIControlEvent>,
-        update_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<DeckUpdate>,
+        update_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<DeckUpdateEvent>,
         start_time: Timecode,
         end_time: Timecode,
     ) -> DeckUpdateResults {
@@ -45,12 +44,12 @@ impl DeckState {
             channel.update_jog(start_time, end_time);
         }
 
-        while let Ok(control_change) = control_event_receiver.try_recv() {
-            control_change.use_binding(self, control_event_sender);
+        while let Ok(deck_state_update_function) = update_receiver.try_recv() {
+            deck_state_update_function(self, control_event_sender);
         }
 
-        while let Ok(deck_state_update_function) = update_receiver.try_recv() {
-            deck_state_update_function(self);
+        while let Ok(control_change) = control_event_receiver.try_recv() {
+            control_change.use_binding(self);
         }
 
         if let Some(master_channel_number) = self.master_channel

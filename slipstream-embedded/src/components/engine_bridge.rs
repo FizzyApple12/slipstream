@@ -91,6 +91,16 @@ mod qobject {
     }
 
     #[qml_element]
+    qnamespace!("PlayDirection");
+    #[qenum]
+    #[namespace = "PlayDirection"]
+    pub enum PlayDirection {
+        Forward,
+        Reverse,
+        SlipReverse,
+    }
+
+    #[qml_element]
     qnamespace!("CrossFaderSide");
     #[qenum]
     #[namespace = "CrossFaderSide"]
@@ -316,12 +326,12 @@ mod qobject {
         #[qproperty(f32, jog_velocity)]
         #[qproperty(bool, display_remaining)]
         #[qproperty(PlayState, play_state)]
+        #[qproperty(PlayDirection, play_direction)]
         #[qproperty(i64, time)]
         #[qproperty(bool, cue_time_set)]
         #[qproperty(i64, cue_time)]
         #[qproperty(bool, touch_cue_time_set)]
         #[qproperty(i64, touch_cue_time)]
-        #[qproperty(bool, reverse_enabled)]
         #[qproperty(TempoRange, tempo_range)]
         #[qproperty(bool, tempo_reset)]
         #[qproperty(f32, tempo_percent)]
@@ -479,17 +489,13 @@ use cxx_qt_lib::{
     QVariant,
 };
 use libdatabase::device_manager::DeviceManager;
-use libdj::{
-    engine::DJEngine,
-    math::harmonics::Key,
-    types::{bindings::UIControlEvent, deck::DeckState, playback::DeckUpdate},
-};
+use libdj::{engine::DJEngineHandle, math::harmonics::Key};
 use libdsp::audio_loader::TrackAudioData;
 use log::warn;
 use qobject::{
     BeatLoopAdjustMode, BeatSyncMode, BrowserEntryType, BrowserPage, ChannelFXEffect,
-    CrossFaderSide, EngineBridgeChannel, EngineBridgeDeck, EngineBridgePlayer, PlayState,
-    SourceListModel, TempoRange,
+    CrossFaderSide, EngineBridgeChannel, EngineBridgeDeck, EngineBridgePlayer, PlayDirection,
+    PlayState, SourceListModel, TempoRange,
 };
 use timecode::Timecode;
 use tokio::runtime::Handle;
@@ -499,21 +505,15 @@ use crate::{
         BrowserListModel, GpuTextureSource, QVector_i32, new_engine_bridge_channel,
         new_engine_bridge_deck, new_engine_bridge_player, new_gpu_texture_source,
     },
+    event_mapper::UIControlEvent,
     waveform_loader::{preview_waveform_to_shader_texture, waveform_to_shader_texture},
 };
 
-static ENGINE_CONNECTION: Mutex<Option<EngineConnection>> = Mutex::new(None);
-
-#[allow(unused)]
-struct EngineConnection {
-    tokio_handle: Handle,
-    dj_engine: DJEngine,
-    deck_state_receiver: tokio::sync::watch::Receiver<DeckState>,
-    deck_update_sender: tokio::sync::mpsc::UnboundedSender<DeckUpdate>,
-    ui_control_event_receiver: tokio::sync::mpsc::UnboundedReceiver<UIControlEvent>,
-    loaded_track_sender: tokio::sync::mpsc::UnboundedSender<(usize, Option<Box<TrackAudioData>>)>,
-    device_manager: DeviceManager,
-}
+static DJ_ENGINE_CONNECTION: Mutex<Option<DJEngineHandle>> = Mutex::new(None);
+static DEVICE_MANAGER: Mutex<Option<DeviceManager>> = Mutex::new(None);
+static EVENT_RECEIVER: Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<UIControlEvent>>> =
+    Mutex::new(None);
+static RUNTIME: Mutex<Option<Handle>> = Mutex::new(None);
 
 #[allow(clippy::struct_excessive_bools)]
 pub struct EngineBridgePlayerRust {
@@ -546,13 +546,12 @@ pub struct EngineBridgePlayerRust {
     pub display_remaining: bool,
 
     pub play_state: PlayState,
+    pub play_direction: PlayDirection,
     pub time: i64, // timecode us
     pub cue_time_set: bool,
     pub cue_time: i64, // timecode us
     pub touch_cue_time_set: bool,
     pub touch_cue_time: i64, // timecode us
-
-    pub reverse_enabled: bool,
 
     pub tempo_range: TempoRange,
     pub tempo_reset: bool,  // tempo reset enabled
@@ -610,12 +609,12 @@ impl Default for EngineBridgePlayerRust {
             display_remaining: true,
 
             play_state: PlayState::Stop,
+            play_direction: PlayDirection::Forward,
             time: 0,
             cue_time_set: false,
             cue_time: 0,
             touch_cue_time_set: false,
             touch_cue_time: 0,
-            reverse_enabled: false,
 
             tempo_range: TempoRange::TenPercent,
             tempo_reset: false,
@@ -904,48 +903,52 @@ impl cxx_qt::Constructor<()> for qobject::EngineBridge {
 
 impl EngineBridgeRust {
     pub fn register(
-        tokio_handle: Handle,
-        dj_engine: DJEngine,
-        deck_state_receiver: tokio::sync::watch::Receiver<DeckState>,
-        deck_update_sender: tokio::sync::mpsc::UnboundedSender<DeckUpdate>,
-        ui_control_event_receiver: tokio::sync::mpsc::UnboundedReceiver<UIControlEvent>,
-        loaded_track_sender: tokio::sync::mpsc::UnboundedSender<(
-            usize,
-            Option<Box<TrackAudioData>>,
-        )>,
+        dj_engine: DJEngineHandle,
         device_manager: DeviceManager,
+        ui_control_event_receiver: tokio::sync::mpsc::UnboundedReceiver<UIControlEvent>,
+        tokio_handle: Handle,
     ) {
-        *ENGINE_CONNECTION
+        *DJ_ENGINE_CONNECTION
             .lock()
-            .expect("Engine connection mutex be free") = Some(EngineConnection {
-            tokio_handle,
-            dj_engine,
-            deck_state_receiver,
-            deck_update_sender,
-            ui_control_event_receiver,
-            loaded_track_sender,
-            device_manager,
-        });
+            .expect("DJ engine connection mutex be free") = Some(dj_engine);
+        *DEVICE_MANAGER.lock().expect("Device manager mutex be free") = Some(device_manager);
+        *EVENT_RECEIVER.lock().expect("Device manager mutex be free") =
+            Some(ui_control_event_receiver);
+        *RUNTIME.lock().expect("Runtime mutex be free") = Some(tokio_handle);
     }
 }
 
 impl qobject::EngineBridge {
     fn before_frame(mut self: Pin<&mut Self>) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut engine_connection_lock) = DJ_ENGINE_CONNECTION.lock() else {
             return;
         };
         let Some(engine_connection) = engine_connection_lock.as_mut() else {
             return;
         };
 
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
+            return;
+        };
+        let Some(device_manager) = device_manager_lock.as_mut() else {
+            return;
+        };
+
+        let Ok(mut event_receiver_lock) = EVENT_RECEIVER.lock() else {
+            return;
+        };
+        let Some(event_receiver) = event_receiver_lock.as_mut() else {
+            return;
+        };
+
         let mut source_index_updated = false;
 
-        while let Some(event) = engine_connection.device_manager.try_recv() {
+        while let Some(event) = device_manager.try_recv() {
             source_index_updated = true;
 
             match event {
                 libdatabase::device_manager::DeviceManagerEvent::DeviceConnected(number) => {
-                    self.as_mut().device_connected(engine_connection, number);
+                    self.as_mut().device_connected(device_manager, number);
                 }
                 libdatabase::device_manager::DeviceManagerEvent::DeviceDisconnected(number) => {
                     self.as_mut().device_disconnected(number);
@@ -954,21 +957,16 @@ impl qobject::EngineBridge {
         }
 
         if source_index_updated {
-            self.as_mut().rebuild_browse_index(engine_connection);
+            self.as_mut().rebuild_browse_index(device_manager);
         }
 
-        if let Ok(changed) = engine_connection.deck_state_receiver.has_changed()
-            && changed
-        {
-            let new_deck_state = engine_connection
-                .deck_state_receiver
-                .borrow_and_update()
-                .clone();
+        if engine_connection.deck_state_changed() {
+            let new_deck_state = engine_connection.get_deck_state().clone();
 
             self.as_mut().update_from_deck_state(&new_deck_state);
         }
 
-        while let Ok(event) = engine_connection.ui_control_event_receiver.try_recv() {
+        while let Ok(event) = event_receiver.try_recv() {
             match event {
                 UIControlEvent::USBEjectPress { slot } => {
                     warn!("not implemented: begin device eject for {slot}");
@@ -998,7 +996,7 @@ impl qobject::EngineBridge {
                         self.as_mut().set_browser_page(BrowserPage::Closed);
                     }
 
-                    self.as_mut().rebuild_browse_index(engine_connection);
+                    self.as_mut().rebuild_browse_index(device_manager);
                 }
                 UIControlEvent::BrowserSourcePress => {
                     if self.source_open {
@@ -1011,19 +1009,19 @@ impl qobject::EngineBridge {
                         self.as_mut().set_source_open(true);
                     }
 
-                    self.as_mut().rebuild_browse_index(engine_connection);
+                    self.as_mut().rebuild_browse_index(device_manager);
                 }
                 UIControlEvent::BrowserBrowsePress => {
                     self.as_mut()
-                        .select_browser_page_internal(BrowserPage::Track, engine_connection);
+                        .select_browser_page_internal(BrowserPage::Track, device_manager);
                 }
                 UIControlEvent::BrowserPlaylistPress => {
                     self.as_mut()
-                        .select_browser_page_internal(BrowserPage::Playlist, engine_connection);
+                        .select_browser_page_internal(BrowserPage::Playlist, device_manager);
                 }
                 UIControlEvent::BrowserSearchPress => {
                     self.as_mut()
-                        .select_browser_page_internal(BrowserPage::Search, engine_connection);
+                        .select_browser_page_internal(BrowserPage::Search, device_manager);
                 }
                 UIControlEvent::MixerChannelFXProximityPress => {
                     self.as_mut().set_mixer_channel_fx_proximity(true);
@@ -1045,10 +1043,10 @@ impl qobject::EngineBridge {
         self.as_mut().set_active_device(device);
         self.as_mut().set_device_selected(true);
 
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
             return;
         };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+        let Some(device_manager) = device_manager_lock.as_mut() else {
             return;
         };
 
@@ -1056,27 +1054,27 @@ impl qobject::EngineBridge {
             self.as_mut().set_browser_page(BrowserPage::Track);
         }
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
 
         self.as_mut().set_source_open(false);
     }
 
     fn select_browser_page(mut self: Pin<&mut Self>, page: BrowserPage) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
             return;
         };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+        let Some(device_manager) = device_manager_lock.as_mut() else {
             return;
         };
 
         self.as_mut()
-            .select_browser_page_internal(page, engine_connection);
+            .select_browser_page_internal(page, device_manager);
     }
 
     fn select_browser_page_internal(
         mut self: Pin<&mut Self>,
         page: BrowserPage,
-        engine_connection: &mut EngineConnection,
+        device_manager: &mut DeviceManager,
     ) {
         if self.as_mut().browser_page == BrowserPage::Closed {
             self.as_mut().set_browser_page(page);
@@ -1094,34 +1092,34 @@ impl qobject::EngineBridge {
             self.as_mut().set_browser_page(page);
         }
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     fn update_browser(mut self: Pin<&mut Self>) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
             return;
         };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+        let Some(device_manager) = device_manager_lock.as_mut() else {
             return;
         };
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     #[allow(clippy::cast_sign_loss)]
     fn select_artist(mut self: Pin<&mut Self>, artist: i32) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
-            return;
-        };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
-            return;
-        };
-
         if !self.device_selected {
             return;
         }
 
-        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
+            return;
+        };
+        let Some(device_manager) = device_manager_lock.as_mut() else {
+            return;
+        };
+
+        let locked_device_manager = device_manager.devices.blocking_lock();
 
         let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
             return;
@@ -1133,20 +1131,21 @@ impl qobject::EngineBridge {
             return;
         };
 
+        self.as_mut().rust_mut().active_artist = Some(artist_id);
         self.as_mut()
             .set_active_artist_name(QString::from(artist.name.clone()));
         self.as_mut().set_artist_selected(true);
 
         drop(locked_device_manager);
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     fn deselect_artist(mut self: Pin<&mut Self>) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
             return;
         };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+        let Some(device_manager) = device_manager_lock.as_mut() else {
             return;
         };
 
@@ -1154,23 +1153,23 @@ impl qobject::EngineBridge {
         self.as_mut().set_artist_selected(false);
         self.as_mut().set_active_artist_name(QString::from(""));
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     #[allow(clippy::cast_sign_loss)]
     fn select_album(mut self: Pin<&mut Self>, album: i32) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
-            return;
-        };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
-            return;
-        };
-
         if !self.device_selected {
             return;
         }
 
-        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
+            return;
+        };
+        let Some(device_manager) = device_manager_lock.as_mut() else {
+            return;
+        };
+
+        let locked_device_manager = device_manager.devices.blocking_lock();
 
         let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
             return;
@@ -1182,20 +1181,21 @@ impl qobject::EngineBridge {
             return;
         };
 
+        self.as_mut().rust_mut().active_album = Some(album_id);
         self.as_mut()
             .set_active_album_name(QString::from(album.name.clone()));
         self.as_mut().set_album_selected(true);
 
         drop(locked_device_manager);
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     fn deselect_album(mut self: Pin<&mut Self>) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
             return;
         };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+        let Some(device_manager) = device_manager_lock.as_mut() else {
             return;
         };
 
@@ -1203,36 +1203,35 @@ impl qobject::EngineBridge {
         self.as_mut().set_album_selected(false);
         self.as_mut().set_active_album_name(QString::from(""));
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     #[allow(clippy::cast_sign_loss)]
     fn select_key(mut self: Pin<&mut Self>, key: i32) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
-            return;
-        };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
-            return;
-        };
-
         if !self.device_selected {
             return;
         }
 
-        let key = Key::from_semitones(key);
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
+            return;
+        };
+        let Some(device_manager) = device_manager_lock.as_mut() else {
+            return;
+        };
 
+        self.as_mut().rust_mut().active_key = Some(key);
         self.as_mut()
-            .set_active_key_name(QString::from(key.to_camelot()));
+            .set_active_key_name(QString::from(Key::from_semitones(key).to_camelot()));
         self.as_mut().set_key_selected(true);
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     fn deselect_key(mut self: Pin<&mut Self>) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
             return;
         };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+        let Some(device_manager) = device_manager_lock.as_mut() else {
             return;
         };
 
@@ -1240,23 +1239,23 @@ impl qobject::EngineBridge {
         self.as_mut().set_key_selected(false);
         self.as_mut().set_active_key_name(QString::from(""));
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     #[allow(clippy::cast_sign_loss)]
     fn push_playlist_node(mut self: Pin<&mut Self>, node: i32) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
-            return;
-        };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
-            return;
-        };
-
         if !self.device_selected {
             return;
         }
 
-        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
+            return;
+        };
+        let Some(device_manager) = device_manager_lock.as_mut() else {
+            return;
+        };
+
+        let locked_device_manager = device_manager.devices.blocking_lock();
 
         let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
             return;
@@ -1264,9 +1263,9 @@ impl qobject::EngineBridge {
 
         let node_id = node as u32;
 
-        if !device.database.library.playlist_tree.contains_key(&node_id) {
+        let Some(playlist_node) = device.database.library.playlist_tree.get(&node_id) else {
             return;
-        }
+        };
 
         let mut playlist_tree_name = String::from("/");
 
@@ -1293,22 +1292,33 @@ impl qobject::EngineBridge {
             playlist_tree_name.push('/');
         }
 
+        playlist_tree_name.push_str(&match playlist_node {
+            libdj::types::library::PlaylistTreeNode::Playlist(playlist) => playlist.name.clone(),
+            libdj::types::library::PlaylistTreeNode::PlaylistFolder(playlist_folder) => {
+                playlist_folder.name.clone()
+            }
+        });
+
+        playlist_tree_name.push('/');
+
         self.as_mut().rust_mut().playlist_tree.push(node_id);
         self.as_mut()
             .set_playlist_tree_name(QString::from(playlist_tree_name));
         self.as_mut().set_playlist_tree_can_pop(true);
 
+        log::warn!("playlist tree: {:#?}", self.playlist_tree);
+
         drop(locked_device_manager);
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     #[allow(clippy::cast_sign_loss)]
     fn pop_playlist_node(mut self: Pin<&mut Self>) {
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
             return;
         };
-        let Some(engine_connection) = engine_connection_lock.as_mut() else {
+        let Some(device_manager) = device_manager_lock.as_mut() else {
             return;
         };
 
@@ -1316,7 +1326,7 @@ impl qobject::EngineBridge {
             return;
         }
 
-        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+        let locked_device_manager = device_manager.devices.blocking_lock();
 
         let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
             return;
@@ -1358,7 +1368,7 @@ impl qobject::EngineBridge {
 
         drop(locked_device_manager);
 
-        self.as_mut().rebuild_browse_index(engine_connection);
+        self.as_mut().rebuild_browse_index(device_manager);
     }
 
     #[allow(clippy::cast_sign_loss)]
@@ -1367,32 +1377,45 @@ impl qobject::EngineBridge {
         let device = device as usize;
         let track_id = track_id as u32;
 
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut engine_connection_lock) = DJ_ENGINE_CONNECTION.lock() else {
             return;
         };
         let Some(engine_connection) = engine_connection_lock.as_mut() else {
             return;
         };
 
-        let loaded_track_sender = engine_connection.loaded_track_sender.clone();
-        let deck_update_sender = engine_connection.deck_update_sender.clone();
+        let Ok(mut device_manager_lock) = DEVICE_MANAGER.lock() else {
+            return;
+        };
+        let Some(device_manager) = device_manager_lock.as_mut() else {
+            return;
+        };
 
-        let device_manager = engine_connection.device_manager.subscribe();
+        let Ok(mut runtime_lock) = RUNTIME.lock() else {
+            return;
+        };
+        let Some(runtime) = runtime_lock.as_mut() else {
+            return;
+        };
+
+        let engine_connection = engine_connection.clone();
+
+        let device_manager = device_manager.subscribe();
 
         let qt_executor_track_details = self.qt_thread();
         let qt_executor_track_analysis = self.qt_thread();
         let qt_executor_preview_waveform = self.qt_thread();
         let qt_executor_full_waveform = self.qt_thread();
 
-        engine_connection.tokio_handle.spawn(async move {
+        runtime.spawn(async move {
             let mut locked_device_database = device_manager.devices.lock().await;
 
             if let Some(qualified_device) = locked_device_database.get_mut(&device)
                 && let Some(track) = qualified_device.database.library.tracks.get(&track_id)
             {
-                let _ = loaded_track_sender.send((player, None));
+                engine_connection.send_loaded_track(player, None);
 
-                let _ = deck_update_sender.send(Box::new(move |deck_state| {
+                engine_connection.send_update_event(Box::new(move |deck_state, _| {
                     if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player) {
                         mixer_channel.player.current_track = None;
                         mixer_channel.player.is_loading = true;
@@ -1463,7 +1486,7 @@ impl qobject::EngineBridge {
 
                 let cloned_track = track.clone();
 
-                let cloned_deck_update_sender = deck_update_sender.clone();
+                let cloned_engine_connection = engine_connection.clone();
 
                 std::thread::spawn(move || {
                     let audio_data = match TrackAudioData::load_from_file(&cloned_track.audio_path)
@@ -1473,21 +1496,23 @@ impl qobject::EngineBridge {
                             // todo: build a way to propagate errors to the ui
                             warn!("Track load error: {err:?}");
 
-                            let _ = cloned_deck_update_sender.send(Box::new(move |deck_state| {
-                                if let Some(mixer_channel) =
-                                    deck_state.mixer_channels.get_mut(player)
-                                {
-                                    mixer_channel.player.is_loading = false;
-                                }
-                            }));
+                            cloned_engine_connection.send_update_event(Box::new(
+                                move |deck_state, _| {
+                                    if let Some(mixer_channel) =
+                                        deck_state.mixer_channels.get_mut(player)
+                                    {
+                                        mixer_channel.player.is_loading = false;
+                                    }
+                                },
+                            ));
 
                             return;
                         }
                     };
 
-                    let _ = loaded_track_sender.send((player, Some(Box::new(audio_data))));
+                    cloned_engine_connection.send_loaded_track(player, Some(Box::new(audio_data)));
 
-                    let _ = cloned_deck_update_sender.send(Box::new(move |deck_state| {
+                    cloned_engine_connection.send_update_event(Box::new(move |deck_state, _| {
                         if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player) {
                             mixer_channel.player.current_track = Some((device, cloned_track));
                             mixer_channel.player.is_loading = false;
@@ -1499,7 +1524,7 @@ impl qobject::EngineBridge {
                 if let Ok(track_analysis) = qualified_device.database.load_analysis(track_id) {
                     let cloned_track_analysis = track_analysis.clone();
 
-                    let _ = deck_update_sender.send(Box::new(move |deck_state| {
+                    engine_connection.send_update_event(Box::new(move |deck_state, _| {
                         if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player) {
                             mixer_channel.player.current_track_analysis =
                                 Some(cloned_track_analysis);
@@ -1686,34 +1711,32 @@ impl qobject::EngineBridge {
     fn eject_track(&self, player: i32) {
         let player = player as usize;
 
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut engine_connection_lock) = DJ_ENGINE_CONNECTION.lock() else {
             return;
         };
         let Some(engine_connection) = engine_connection_lock.as_mut() else {
             return;
         };
 
-        let _ = engine_connection
-            .deck_update_sender
-            .send(Box::new(move |deck_state| {
-                if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player) {
-                    mixer_channel.player.current_track = None;
-                    mixer_channel.player.current_track_analysis = None;
-                    mixer_channel.player.is_loading = false;
+        engine_connection.send_update_event(Box::new(move |deck_state, _| {
+            if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player) {
+                mixer_channel.player.current_track = None;
+                mixer_channel.player.current_track_analysis = None;
+                mixer_channel.player.is_loading = false;
 
-                    mixer_channel.player.time = Timecode::zero();
-                    mixer_channel.player.slip_time = Timecode::zero();
-                    mixer_channel.player.cue_time = None;
-                    mixer_channel.player.touch_cue_time = None;
+                mixer_channel.player.time = Timecode::zero();
+                mixer_channel.player.slip_time = Timecode::zero();
+                mixer_channel.player.cue_time = None;
+                mixer_channel.player.touch_cue_time = None;
 
-                    mixer_channel.player.beat_loop_start = None;
-                    mixer_channel.player.beat_loop_end = None;
+                mixer_channel.player.beat_loop_start = None;
+                mixer_channel.player.beat_loop_end = None;
 
-                    mixer_channel.player.keyshift = 0.0;
-                }
-            }));
+                mixer_channel.player.keyshift = 0.0;
+            }
+        }));
 
-        let _ = engine_connection.loaded_track_sender.send((player, None));
+        engine_connection.send_loaded_track(player, None);
     }
 
     // fn eject_device(self: Pin<&mut EngineBridge>, device: i32) {}
@@ -1727,44 +1750,40 @@ impl qobject::EngineBridge {
     fn touch_cue_move(&self, player: i32, position: f32) {
         let player = player as usize;
 
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut engine_connection_lock) = DJ_ENGINE_CONNECTION.lock() else {
             return;
         };
         let Some(engine_connection) = engine_connection_lock.as_mut() else {
             return;
         };
 
-        let _ = engine_connection
-            .deck_update_sender
-            .send(Box::new(move |deck_state| {
-                if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player)
-                    && let Some((_, track)) = &mixer_channel.player.current_track
-                {
-                    mixer_channel.player.touch_cue_time = Some(Timecode::from_nanoseconds(
-                        (track.duration as f64 * f64::from(position)) as i64,
-                    ));
-                }
-            }));
+        engine_connection.send_update_event(Box::new(move |deck_state, _| {
+            if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player)
+                && let Some((_, track)) = &mixer_channel.player.current_track
+            {
+                mixer_channel.player.touch_cue_time = Some(Timecode::from_nanoseconds(
+                    (track.duration as f64 * f64::from(position)) as i64,
+                ));
+            }
+        }));
     }
 
     #[allow(clippy::cast_sign_loss, clippy::unused_self)]
     fn touch_cue_release(&self, player: i32) {
         let player = player as usize;
 
-        let Ok(mut engine_connection_lock) = ENGINE_CONNECTION.lock() else {
+        let Ok(mut engine_connection_lock) = DJ_ENGINE_CONNECTION.lock() else {
             return;
         };
         let Some(engine_connection) = engine_connection_lock.as_mut() else {
             return;
         };
 
-        let _ = engine_connection
-            .deck_update_sender
-            .send(Box::new(move |deck_state| {
-                if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player) {
-                    mixer_channel.player.touch_cue_time = None;
-                }
-            }));
+        engine_connection.send_update_event(Box::new(move |deck_state, _| {
+            if let Some(mixer_channel) = deck_state.mixer_channels.get_mut(player) {
+                mixer_channel.player.touch_cue_time = None;
+            }
+        }));
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
@@ -1858,6 +1877,13 @@ impl qobject::EngineBridge {
                 });
             player_pin
                 .as_mut()
+                .set_play_direction(match new_channel.player.play_direction {
+                    libdj::types::deck::PlayDirection::Forward => PlayDirection::Forward,
+                    libdj::types::deck::PlayDirection::Reverse => PlayDirection::Reverse,
+                    libdj::types::deck::PlayDirection::SlipReverse => PlayDirection::SlipReverse,
+                });
+            player_pin
+                .as_mut()
                 .set_time(new_channel.player.time.nanoseconds);
             player_pin
                 .as_mut()
@@ -1877,9 +1903,6 @@ impl qobject::EngineBridge {
                     .touch_cue_time
                     .map_or(0, |timecode| timecode.nanoseconds),
             );
-            player_pin
-                .as_mut()
-                .set_reverse_enabled(new_channel.player.reverse_enabled);
             player_pin
                 .as_mut()
                 .set_tempo_range(match new_channel.player.tempo_range {
@@ -1999,13 +2022,8 @@ impl qobject::EngineBridge {
         clippy::cast_possible_truncation,
         clippy::cast_possible_wrap
     )]
-    fn device_connected(
-        self: Pin<&mut Self>,
-        engine_connection: &mut EngineConnection,
-        number: usize,
-    ) {
-        let label = engine_connection
-            .device_manager
+    fn device_connected(self: Pin<&mut Self>, device_manager: &mut DeviceManager, number: usize) {
+        let label = device_manager
             .devices
             .blocking_lock()
             .get(&number)
@@ -2106,7 +2124,7 @@ impl qobject::EngineBridge {
         clippy::cast_possible_truncation,
         clippy::cast_possible_wrap
     )]
-    fn rebuild_browse_index(mut self: Pin<&mut Self>, engine_connection: &mut EngineConnection) {
+    fn rebuild_browse_index(mut self: Pin<&mut Self>, device_manager: &mut DeviceManager) {
         // Safety: Probably not
         let mut browser_index_pin = unsafe {
             let Some(browser_index) = self.browser_index.as_mut() else {
@@ -2128,7 +2146,7 @@ impl qobject::EngineBridge {
             return;
         }
 
-        let locked_device_manager = engine_connection.device_manager.devices.blocking_lock();
+        let locked_device_manager = device_manager.devices.blocking_lock();
 
         let Some(device) = locked_device_manager.get(&(self.active_device as usize)) else {
             drop(locked_device_manager);
@@ -2887,7 +2905,6 @@ impl qobject::EngineBridge {
                             }
                         }
                     }
-                } else {
                 }
             }
             _ => {

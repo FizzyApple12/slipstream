@@ -12,7 +12,6 @@ tokio-stream = { workspace = true, optional = true }
 num.workspace = true
 criterion.workspace = true
 timecode = { path = "../timecode" }
-macro-helpers = { path = "../macro-helpers" }
 cpal = { version = "0.18.2", features = [ "pipewire" ], optional = true }
 libdsp = { path = "../libdsp", optional = true }
 

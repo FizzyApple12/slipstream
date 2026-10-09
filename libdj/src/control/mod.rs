@@ -1,11 +1,8 @@
 use crate::types::deck::BeatSyncMode;
 #[allow(clippy::wildcard_imports)]
 use crate::{
-    bindings::{buttons::*, jog::*, knobs::*, sliders::*},
-    types::{
-        bindings::{DeckControlEvent, UIControlEvent},
-        deck::DeckState,
-    },
+    control::{buttons::*, jog::*, knobs::*, sliders::*},
+    types::{control::DeckControlEvent, deck::DeckState},
 };
 
 pub mod buttons;
@@ -21,43 +18,8 @@ pub mod sliders;
 
 impl DeckControlEvent {
     // there are a lot of button bindings
-    pub fn use_binding(
-        self,
-        deck_state: &mut DeckState,
-        playback_event_sender: &mut tokio::sync::mpsc::UnboundedSender<UIControlEvent>,
-    ) {
+    pub fn use_binding(self, deck_state: &mut DeckState) {
         match self {
-            // browser
-            DeckControlEvent::USBEjectPress { slot } => {
-                let _ = playback_event_sender.send(UIControlEvent::USBEjectPress { slot });
-            }
-            DeckControlEvent::USBEjectRelease { slot } => {
-                let _ = playback_event_sender.send(UIControlEvent::USBEjectRelease { slot });
-            }
-
-            DeckControlEvent::BrowserEncoderAdjust { delta } => {
-                let _ = playback_event_sender.send(UIControlEvent::BrowserEncoderAdjust { delta });
-            }
-            DeckControlEvent::BrowserEncoderPress => {
-                let _ = playback_event_sender.send(UIControlEvent::BrowserEncoderPress);
-            }
-
-            DeckControlEvent::BrowserBackPress => {
-                let _ = playback_event_sender.send(UIControlEvent::BrowserBackPress);
-            }
-            DeckControlEvent::BrowserSourcePress => {
-                let _ = playback_event_sender.send(UIControlEvent::BrowserSourcePress);
-            }
-            DeckControlEvent::BrowserBrowsePress => {
-                let _ = playback_event_sender.send(UIControlEvent::BrowserBrowsePress);
-            }
-            DeckControlEvent::BrowserPlaylistPress => {
-                let _ = playback_event_sender.send(UIControlEvent::BrowserPlaylistPress);
-            }
-            DeckControlEvent::BrowserSearchPress => {
-                let _ = playback_event_sender.send(UIControlEvent::BrowserSearchPress);
-            }
-
             // mixer
             DeckControlEvent::MixerMasterGainSet { position } => {
                 mixer_master_gain_set(deck_state, position);
@@ -69,12 +31,6 @@ impl DeckControlEvent {
 
             DeckControlEvent::MixerMasterFXSelect { delta } => {
                 log::warn!("Unbound Action: Mixer Master FX Select by {delta}");
-            }
-            DeckControlEvent::MixerMasterFXSelectTouchPress => {
-                let _ = playback_event_sender.send(UIControlEvent::MixerMasterFXSelectTouchPress);
-            }
-            DeckControlEvent::MixerMasterFXSelectTouchRelease => {
-                let _ = playback_event_sender.send(UIControlEvent::MixerMasterFXSelectTouchRelease);
             }
             DeckControlEvent::MixerMasterFXParameterAdjust { delta } => {
                 log::warn!("Unbound Action: Mixer Master FX Parameter Adjust by {delta}");
@@ -95,12 +51,6 @@ impl DeckControlEvent {
 
             DeckControlEvent::MixerChannelFXPress { number } => {
                 log::warn!("Unbound Action: Mixer Channel FX {number} Press");
-            }
-            DeckControlEvent::MixerChannelFXProximityPress => {
-                let _ = playback_event_sender.send(UIControlEvent::MixerChannelFXProximityPress);
-            }
-            DeckControlEvent::MixerChannelFXProximityRelease => {
-                let _ = playback_event_sender.send(UIControlEvent::MixerChannelFXProximityRelease);
             }
 
             DeckControlEvent::MixerCrossfaderSet { position } => {
@@ -183,6 +133,12 @@ impl DeckControlEvent {
             }
             DeckControlEvent::PlayerReverseRelease { channel } => {
                 player_reverse_release(deck_state, channel);
+            }
+            DeckControlEvent::PlayerSlipReversePress { channel } => {
+                player_slip_reverse_press(deck_state, channel);
+            }
+            DeckControlEvent::PlayerSlipReverseRelease { channel } => {
+                player_slip_reverse_release(deck_state, channel);
             }
             DeckControlEvent::PlayerCuePress { channel } => {
                 player_cue_press(deck_state, channel, false);

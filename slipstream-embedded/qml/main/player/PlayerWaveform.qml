@@ -191,7 +191,11 @@ FlexboxLayout {
             width: 1
             height: waveform_container.height
 
-            visible: root.engine.deck_state.mixer_channel(root.player_number).player.slip_playing
+            visible: {
+            	let player = root.engine.deck_state.mixer_channel(root.player_number).player;
+
+             	return player.slip_playing || player.play_direction == PlayDirection.SlipReverse;
+            }
 
             color: "#ff0000"
         }

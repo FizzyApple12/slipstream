@@ -1,31 +1,19 @@
-extern crate macro_helpers;
-use macro_helpers::EnumStrConverters;
 use rkyv::{Archive, Deserialize, Serialize};
 
-#[derive(Clone, Copy, Archive, Serialize, Deserialize, Debug, EnumStrConverters)]
+use crate::types::deck::DeckState;
+
+pub type DeckUpdateEvent = Box<
+    dyn FnOnce(&mut DeckState, &mut tokio::sync::mpsc::UnboundedSender<DeckControlEvent>) + Send,
+>;
+
+#[derive(Clone, Copy, Archive, Serialize, Deserialize, Debug)]
 pub enum DeckControlEvent {
-    // usb
-    USBEjectPress { slot: usize },
-    USBEjectRelease { slot: usize },
-
-    // browser
-    BrowserEncoderAdjust { delta: f32 },
-    BrowserEncoderPress,
-
-    BrowserBackPress,
-    BrowserSourcePress,
-    BrowserBrowsePress,
-    BrowserPlaylistPress,
-    BrowserSearchPress,
-
     // mixer
     MixerMasterGainSet { position: f32 },
     MixerMasterCuePress,
     MixerMasterMasterFXTargetPress,
 
     MixerMasterFXSelect { delta: f32 },
-    MixerMasterFXSelectTouchPress,
-    MixerMasterFXSelectTouchRelease,
     MixerMasterFXParameterAdjust { delta: f32 },
     MixerMasterFXParameterSelectPress,
     MixerMasterFXBPMAdjust { delta: f32 },
@@ -34,8 +22,6 @@ pub enum DeckControlEvent {
     MixerMasterFXEnablePress,
 
     MixerChannelFXPress { number: usize },
-    MixerChannelFXProximityPress,
-    MixerChannelFXProximityRelease,
 
     MixerCrossfaderSet { position: f32 },
 
@@ -72,6 +58,8 @@ pub enum DeckControlEvent {
     PlayerPlayPress { channel: usize },
     PlayerReversePress { channel: usize },
     PlayerReverseRelease { channel: usize },
+    PlayerSlipReversePress { channel: usize },
+    PlayerSlipReverseRelease { channel: usize },
     PlayerCuePress { channel: usize },
     PlayerCueRelease { channel: usize },
     PlayerAltCuePress { channel: usize },
@@ -101,28 +89,4 @@ pub enum DeckControlEvent {
     PlayerInstantLoopPress { channel: usize },
 
     PlayerPadPress { channel: usize, number: usize },
-}
-
-#[derive(Clone, Copy, Archive, Serialize, Deserialize, Debug)]
-pub enum UIControlEvent {
-    // usb
-    USBEjectPress { slot: usize },
-    USBEjectRelease { slot: usize },
-
-    // browser
-    BrowserEncoderAdjust { delta: f32 },
-    BrowserEncoderPress,
-
-    BrowserBackPress,
-    BrowserSourcePress,
-    BrowserBrowsePress,
-    BrowserPlaylistPress,
-    BrowserSearchPress,
-
-    // mixer
-    MixerChannelFXProximityPress,
-    MixerChannelFXProximityRelease,
-
-    MixerMasterFXSelectTouchPress,
-    MixerMasterFXSelectTouchRelease,
 }

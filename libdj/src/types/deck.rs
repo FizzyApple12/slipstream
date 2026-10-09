@@ -22,6 +22,13 @@ pub enum PlayState {
 }
 
 #[derive(Debug, Clone, Copy, Archive, Deserialize, Serialize, PartialEq)]
+pub enum PlayDirection {
+    Forward,
+    Reverse,
+    SlipReverse,
+}
+
+#[derive(Debug, Clone, Copy, Archive, Deserialize, Serialize, PartialEq)]
 pub enum CrossFaderSide {
     A,
     B,
@@ -147,11 +154,10 @@ pub struct PlayerState {
     pub jog_velocity: f32,
 
     pub play_state: PlayState,
+    pub play_direction: PlayDirection,
     pub time: Timecode,
     pub cue_time: Option<Timecode>,       // timecode/cue not set
     pub touch_cue_time: Option<Timecode>, // timecode/touch cue not active
-
-    pub reverse_enabled: bool,
 
     pub tempo_range: TempoRange,
     pub tempo_reset: bool,  // tempo reset enabled
@@ -190,10 +196,10 @@ impl Default for PlayerState {
             jog_velocity: 0.0,
 
             play_state: PlayState::Stop,
+            play_direction: PlayDirection::Forward,
             time: Timecode::zero(),
             cue_time: None,
             touch_cue_time: None,
-            reverse_enabled: false,
 
             tempo_range: TempoRange::TenPercent,
             tempo_reset: false,

@@ -1,4 +1,4 @@
-use crate::types::deck::DeckState;
+use crate::types::deck::{DeckState, PlayDirection};
 
 pub fn player_jog_press(deck_state: &mut DeckState, channel: usize) {
     if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
@@ -12,7 +12,9 @@ pub fn player_jog_release(deck_state: &mut DeckState, channel: usize) {
 
         if !(-f32::EPSILON..=f32::EPSILON).contains(&channel.player.jog_velocity) {
             channel.player.jog_wait = true;
-        } else if channel.player.slip_playing {
+        } else if channel.player.slip_playing
+            || channel.player.play_direction == PlayDirection::SlipReverse
+        {
             channel.player.time = channel.player.slip_time;
         }
     }

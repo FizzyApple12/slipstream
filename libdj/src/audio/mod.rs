@@ -18,17 +18,16 @@ use crate::{
     AUDIO_CHANNELS, MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH,
     audio::dsp_pipeline::deck::DeckDSP,
     types::{
-        bindings::{DeckControlEvent, UIControlEvent},
+        control::{DeckControlEvent, DeckUpdateEvent},
         deck::DeckState,
-        playback::DeckUpdate,
     },
 };
 
 pub struct AudioSystemChannels {
-    pub control_event_receiver: tokio::sync::mpsc::UnboundedReceiver<DeckControlEvent>,
-    pub control_event_sender: tokio::sync::mpsc::UnboundedSender<UIControlEvent>,
-    pub deck_update_receiver: tokio::sync::mpsc::UnboundedReceiver<DeckUpdate>,
     pub deck_state_sender: tokio::sync::watch::Sender<DeckState>,
+    pub control_event_sender: tokio::sync::mpsc::UnboundedSender<DeckControlEvent>,
+    pub control_event_receiver: tokio::sync::mpsc::UnboundedReceiver<DeckControlEvent>,
+    pub deck_update_receiver: tokio::sync::mpsc::UnboundedReceiver<DeckUpdateEvent>,
     pub loaded_track_receiver:
         tokio::sync::mpsc::UnboundedReceiver<(usize, Option<Box<TrackAudioData>>)>,
 }
@@ -274,8 +273,8 @@ impl AudioSystem {
                         );
 
                     let update_results = deck_state.update(
-                        control_event_receiver,
                         control_event_sender,
+                        control_event_receiver,
                         deck_update_receiver,
                         *last_process_timecode,
                         current_timecode,
