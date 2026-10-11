@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171817">
+  <title>Slipstream — Find your flow.</title>
+  <meta name="description" content="A new rhythm for DJ software. Slipstream is building a standalone mixing experience around your music, your controls, and the dancefloor. Explore the project and play the sound study.">
+  <meta property="og:title" content="Slipstream — Find your flow.">
+  <meta property="og:description" content="Less laptop. More dancefloor. A new standalone DJ project, taking shape.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://slipstream-dj.vercel.app/">
+  <meta property="og:image" content="https://slipstream-dj.vercel.app/assets/social.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Slipstream. Less laptop. More dancefloor.">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://slipstream-dj.vercel.app/">
+  <link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
+  <link rel="stylesheet" href="/assets/fonts/fonts.css">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="header wrap">
+    <a href="#" class="brand" aria-label="Slipstream home"><svg aria-hidden="true" viewBox="0 0 40 36"><path d="M3 12h23L15 26h22M11 3h23l-7 9M14 26l-6 7h21"/></svg><span>slipstream</span></a>
+    <nav aria-label="Main navigation"><a href="#idea">The idea</a><a href="#playground">The playground</a><a href="#next">What’s next <span aria-hidden="true">↗</span></a></nav>
+    <span class="status mono"><span class="status-dot"></span> IN DEVELOPMENT</span>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="eyebrow mono"><span>INDEPENDENT DJ SOFTWARE</span><span>VOL. 001 / TAKING SHAPE</span></div>
+      <h1 id="hero-title">LESS LAPTOP.<br><span>MORE DANCEFLOOR.</span><svg class="hero-star" aria-hidden="true" viewBox="0 0 100 100"><path d="M50 0v100M0 50h100M14.6 14.6l70.8 70.8M14.6 85.4l70.8-70.8"/></svg></h1>
+      <div class="hero-bottom"><p>We’re building a new standalone DJ experience.<br>Your music. Familiar controls. Room to get lost.</p><a href="#playground" class="button button-orange">Find your flow <span aria-hidden="true">↘</span></a><span class="hero-note mono">MADE FOR THE MOMENT<br>BETWEEN TWO TRACKS.</span></div>
+    </section>
+
+    <section class="playground wrap" id="playground" aria-labelledby="playground-title">
+      <div class="section-bar mono"><h2 id="playground-title">01 / GET A FEEL FOR IT</h2><span>HEADPHONES ON. CURIOSITY UP.</span></div>
+      <div class="instrument">
+        <div class="instrument-top"><span class="instrument-brand">slipstream<span class="small-cross">✳</span></span><div class="instrument-mode mono"><span class="tiny-led" id="signal-led"></span><span id="signal-label">READY WHEN YOU ARE</span></div><span class="mono model-label">SOUND STUDY / 001</span></div>
+        <div class="console">
+          <div class="display">
+            <div class="display-top mono"><span><span class="live-dot"></span> ORIGINAL LOOPS</span><span id="session-time">00:00</span><span>STEREO</span></div>
+            <div class="deck deck-a"><div class="deck-meta"><div><span class="deck-number mono">A</span><span class="track-title">Afterhours</span></div><span class="track-detail mono">PERCUSSION / LOW END</span><span class="track-key mono">F MIN</span></div><canvas id="wave-a" height="100" aria-label="Decorative waveform for the Afterhours loop"></canvas><div class="wave-grid" aria-hidden="true"><span>01</span><span>02</span><span>03</span><span>04</span><span>05</span></div></div>
+            <div class="deck deck-b"><div class="deck-meta"><div><span class="deck-number mono">B</span><span class="track-title">Side street</span></div><span class="track-detail mono">CHORDS / LATE NIGHTS</span><span class="track-key mono">F MIN</span></div><canvas id="wave-b" height="100" aria-label="Decorative waveform for the Side street loop"></canvas><div class="wave-grid" aria-hidden="true"><span>01</span><span>02</span><span>03</span><span>04</span><span>05</span></div></div>
+            <div class="playhead" aria-hidden="true"><span></span></div>
+          </div>
+          <div class="transport">
+            <div class="tempo-label mono">SET THE PACE</div><div class="tempo"><button type="button" id="tempo-down" aria-label="Decrease tempo">−</button><span><output id="bpm">126</output><small class="mono">BPM</small></span><button type="button" id="tempo-up" aria-label="Increase tempo">+</button></div>
+            <div class="beat-lights" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <button type="button" id="play" class="play-button" aria-label="Play sound study" aria-pressed="false"><svg viewBox="0 0 32 32" aria-hidden="true" class="play-icon"><path d="M10 5l18 11-18 11z"/></svg><svg viewBox="0 0 32 32" aria-hidden="true" class="pause-icon"><path d="M8 5h6v22H8zM20 5h6v22h-6z"/></svg></button>
+            <span class="play-label mono" id="play-label">PRESS PLAY</span>
+          </div>
+        </div>
+        <div class="mixer">
+          <div class="mix-control"><div class="control-label mono"><label for="crossfader">MAKE THE TRANSITION</label><output id="mix-label" for="crossfader">A 50 / B 50</output></div><div class="fader-row"><span class="mono orange">A</span><input type="range" id="crossfader" min="0" max="100" value="50" aria-label="Crossfade between Afterhours and Side street"><span class="mono blue">B</span></div><div class="fader-ticks" aria-hidden="true"></div></div>
+          <div class="filter-control"><div class="control-label mono"><label for="filter">OPEN IT UP</label><output id="filter-label" for="filter">100%</output></div><input type="range" id="filter" min="0" max="100" value="100" aria-label="Low-pass filter openness"></div>
+          <button type="button" class="reset mono" id="reset">RESET MIX <span aria-hidden="true">↺</span></button>
+        </div>
+        <div class="instrument-bottom mono"><span>GO ON. TOUCH SOMETHING.</span><div class="screw" aria-hidden="true"></div><span>DESIGNED TO BE PLAYED</span></div>
+      </div>
+      <div class="demo-caption"><p>An interactive browser sound study, with original synthesized loops.<br>This is a taste of the direction, not the native Slipstream engine.</p><p class="mono" id="audio-status" role="status" aria-live="polite">SOUND STARTS WHEN YOU PRESS PLAY <span aria-hidden="true">↗</span></p></div>
+      <noscript><p class="no-script">The sound study needs JavaScript. You can still explore the project below.</p></noscript>
+    </section>
+
+    <div class="ticker" aria-hidden="true"><div>STAY CURIOUS <span>✳</span> TRUST YOUR EARS <span>✳</span> FIND YOUR FLOW <span>✳</span> STAY CURIOUS <span>✳</span> TRUST YOUR EARS <span>✳</span></div></div>
+
+    <section class="idea wrap" id="idea" aria-labelledby="idea-title">
+      <div class="section-bar mono"><h2>02 / THE IDEA</h2><span>LESS BETWEEN YOU AND THE MUSIC.</span></div>
+      <div class="idea-intro"><h2 id="idea-title">GOOD THINGS<br>HAPPEN <em>IN THE MIX.</em></h2><p>That next track you didn’t plan to play. The transition that changes the room. We’re building Slipstream around those moments: a dedicated DJ instrument that leaves space for instinct.</p></div>
+      <div class="principles">
+        <article><span class="mono principle-index">01 / YOUR COLLECTION</span><div class="principle-graphic collection" aria-hidden="true"><div class="record"><span></span></div><div class="record"><span></span></div><div class="record"><span></span></div></div><h3>Bring your own world.</h3><p>The music you’ve dug for deserves a home. USB library browsing is at the heart of the project, starting with legacy Rekordbox exports.</p><span class="mono principle-tag">MUSIC FIRST, ALWAYS.</span></article>
+        <article><span class="mono principle-index">02 / YOUR INSTINCT</span><div class="principle-graphic sliders" aria-hidden="true"><i></i><i></i><i></i><i></i></div><h3>Keep your hands in it.</h3><p>Jog, cue, loop, blend. We’re connecting a custom mixing engine to physical controls, with the DDJ-FLX10 as the first integration target.</p><span class="mono principle-tag">FEEL YOUR WAY THROUGH.</span></article>
+        <article><span class="mono principle-index">03 / YOUR SETUP</span><div class="principle-graphic constellation" aria-hidden="true"><div class="device">s<span>↗</span></div><i></i><i></i><i></i></div><h3>A life beyond the laptop.</h3><p>A dedicated interface. An embedded Linux foundation. The direction is standalone hardware, with the software shaped around the set.</p><span class="mono principle-tag">A DIFFERENT KIND OF INSTRUMENT.</span></article>
+      </div>
+    </section>
+
+    <section class="next" id="next" aria-labelledby="next-title"><div class="wrap next-inner"><div class="next-copy"><div class="mono next-eyebrow"><span class="status-dot"></span> EARLY DAYS. BIG IDEAS.</div><h2 id="next-title">THE NEXT CHAPTER<br>IS <em>UNWRITTEN.</em></h2><p>Slipstream is taking shape in public. Follow the build, explore the code, and help shape what comes next.</p><a class="button button-dark" href="https://github.com/rayhanadev/slipstream" target="_blank" rel="noopener noreferrer" id="project-cta">Follow the build <span aria-hidden="true">↗</span></a></div><div class="build-note"><span class="mono">A NOTE FROM THE WORKBENCH</span><p>We’re building the engine, library browser, and controller integration. Hardware support and performance are still being validated.</p><p>There’s no finished product for sale yet. This is your invitation to be here early.</p><a href="https://github.com/rayhanadev/slipstream/blob/master/README.md" target="_blank" rel="noopener noreferrer">See what we’re working on <span aria-hidden="true">↗</span></a></div></div></section>
+  </main>
+  <footer class="wrap footer"><a class="brand" href="#" aria-label="Slipstream home"><svg aria-hidden="true" viewBox="0 0 40 36"><path d="M3 12h23L15 26h22M11 3h23l-7 9M14 26l-6 7h21"/></svg><span>slipstream</span></a><span class="mono">INDEPENDENT SPIRIT. SHARED FREQUENCY.</span><a href="https://github.com/rayhanadev/slipstream" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a><a href="#main" class="back-top mono">BACK TO TOP ↑</a></footer>
+</body>
+</html>
