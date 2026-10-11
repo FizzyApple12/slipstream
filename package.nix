@@ -87,7 +87,7 @@ rustPlatform.buildRustPackage {
   meta = {
     license = lib.licenses.gpl2Plus;
     description = "DJ Deck Application for Embedded Systems";
-    homepage = "https://github.com/fizzyapple12/djdeck";
+    homepage = "https://github.com/FizzyApple12/slipstream";
     maintainers = with lib.maintainers; [ fizzyapple12 ];
     mainProgram = "slipstream-embedded";
     platforms = lib.platforms.all;

@@ -16,7 +16,7 @@ Open http://127.0.0.1:4173. No dependencies or build step are required. Run `npm
 
 ## Deploy
 
-This directory is deployed manually to the `slipstream-dj` Vercel project in the `rayhanadev-team` scope. From this directory:
+The current public deployment is hosted in Rayhan’s `rayhanadev-team` Vercel scope, under the `slipstream-dj` project. It is deployed manually. Maintainers with access to that Vercel project can run the following from this directory:
 
 ```sh
 vercel link --yes --project slipstream-dj --scope rayhanadev-team
@@ -25,7 +25,7 @@ vercel deploy --prod --yes --scope rayhanadev-team
 
 Select or retain the Other framework preset, `.` output directory, and no build command. Git auto-deployment is disconnected so changes to the native application do not replace this static site. If the CLI reconnects the repository while linking, run `vercel git disconnect --scope rayhanadev-team` before relying on manual deployment.
 
-If you move the site to a custom domain, update the canonical URL and Open Graph URLs in `index.html`.
+For your own deployment, use a Vercel project and scope you control instead. Update the canonical URL and Open Graph URLs in `index.html` to your deployment URL or custom domain.
 
 ## Files
 

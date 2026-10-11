@@ -47,7 +47,7 @@ The current development path is **Linux + Nix**, using the Rust nightly pinned i
 the audio libraries, and the native build tools.
 
 ```sh
-git clone https://github.com/rayhanadev/slipstream.git
+git clone https://github.com/FizzyApple12/slipstream.git
 cd slipstream
 nix develop
 rustup toolchain install nightly-2026-07-19
