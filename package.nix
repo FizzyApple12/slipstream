@@ -85,6 +85,7 @@ rustPlatform.buildRustPackage {
   LIBCLANG_PATH = lib.makeLibraryPath [llvmPackages.libclang.lib];
 
   meta = {
+    license = lib.licenses.gpl2Plus;
     description = "DJ Deck Application for Embedded Systems";
     homepage = "https://github.com/fizzyapple12/djdeck";
     maintainers = with lib.maintainers; [ fizzyapple12 ];

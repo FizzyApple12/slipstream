@@ -1,0 +1,65 @@
+# Roadmap
+
+The workbench list for Slipstream. These are planned tasks, not shipped features
+or release commitments.
+
+## Research
+
+https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/exports.html
+https://djl-analysis.deepsymmetry.org/djl-analysis/packets.html
+
+## Toward RC1
+
+* usb-stored settings system
+* finish button bindings
+* rearchitect the audio pipeline
+	* arena, nesting, proc macro
+	* build a custom Phase Vocoder around RustFFT
+	* fill in filter coefficients based on https://vicanek.de/articles/BiquadFits.pdf
+* rearchitect the dj engine
+	* modular bus structured as virtual players and mixers
+	* segment control and communication to a flat architecture instead of a top-down architecture
+* effects:
+	* low cut echo
+	* echo
+	* delay (dub echo)
+	* spiral
+	* reverb
+	* transgate
+	* enigma jet
+	* flanger
+	* phaser
+	* stretch
+	* slip roll
+	* roll
+	* ping pong
+	* helix
+	* filter
+	* mobius square
+	* mobius saw
+	* mobius triangle
+	* noise
+	* crush
+	* pitch
+* usb recording
+* switch waveform generation to use an onboard stft for consistency
+* add graceful error handling for everything
+* screen io board firmware
+* mixer io board firmware
+* player io board firmware
+
+## Toward 1.0
+
+* interactive bpm tap analysis
+* pro dj link
+* onelibrary support + deduplication with old rekordbox format
+* usb library switching (for multiple libraries)
+* engine dj library support
+* onboarding flow
+* track analysis algorithm
+* custom library format for onboard analysis
+* track streaming support
+* stems support
+* stems splitter
+* make final slipstreamOS distribution
+* dj engine builder

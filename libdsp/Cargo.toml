@@ -2,6 +2,7 @@
 name = "libdsp"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 timecode = { path = "../timecode" }
