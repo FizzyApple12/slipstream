@@ -32,12 +32,11 @@ impl PlayerState {
         };
 
         !(self.current_track.is_none()
-            || self.current_track_analysis.is_none()
             || self.time < Timecode::zero()
             || self.time > last_beat.time
             || self.play_state == PlayState::Stop
             || self.play_direction != PlayDirection::Forward
-            || !self.slip_playing
+            || self.slip_playing
             || self.jog_hold
             || self.jog_wait
             || !(-f32::EPSILON..=f32::EPSILON).contains(&self.jog_velocity))

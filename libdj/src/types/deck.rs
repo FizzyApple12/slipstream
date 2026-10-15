@@ -12,6 +12,7 @@ pub enum TempoRange {
     TenPercent,
     SixteenPercent,
     OneHundredPercent,
+    YesPercent,
 }
 
 #[derive(Debug, Clone, Copy, Archive, Deserialize, Serialize, PartialEq)]

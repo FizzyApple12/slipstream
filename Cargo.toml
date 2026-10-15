@@ -7,8 +7,8 @@ members = [
     "libdsp",
     "libio",
     "timecode",
-    "macro-helpers",
-]
+    "macro-helpers"
+, "drivers/ddj_flx10"]
 exclude = [
 ]
 

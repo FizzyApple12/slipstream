@@ -1,35 +1,41 @@
-use std::marker::PhantomData;
+// https://webaudio.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html
+
+use std::{f64::consts::PI, marker::PhantomData};
+
+use num::pow::Pow;
 
 use crate::pipeline::nesting_inlining::{DataExtractor, PipelineNode};
 
 pub enum FilterConfiguration<
     Data,
     ScaledFrequencyDataExtractor,
-    OctaveTargetDataExtractor,
+    BandwidthTargetDataExtractor,
     QFactorDataExtractor,
     GainDataExtractor,
     DecibelGainDataExtractor,
 > {
     Disabled(PhantomData<Data>),
-    LowPass(ScaledFrequencyDataExtractor, OctaveTargetDataExtractor),
+    LowPass(ScaledFrequencyDataExtractor, BandwidthTargetDataExtractor),
     LowPassQ(ScaledFrequencyDataExtractor, QFactorDataExtractor),
-    HighPass(ScaledFrequencyDataExtractor, OctaveTargetDataExtractor),
+    HighPass(ScaledFrequencyDataExtractor, BandwidthTargetDataExtractor),
     HighPassQ(ScaledFrequencyDataExtractor, QFactorDataExtractor),
-    BandPass(ScaledFrequencyDataExtractor, OctaveTargetDataExtractor),
-    BandPassQ(ScaledFrequencyDataExtractor, QFactorDataExtractor),
-    AllPass(ScaledFrequencyDataExtractor, OctaveTargetDataExtractor),
-    AllPassQ(ScaledFrequencyDataExtractor, QFactorDataExtractor),
-    Notch(ScaledFrequencyDataExtractor, OctaveTargetDataExtractor),
+    ConstantSkirtGainBandPass(ScaledFrequencyDataExtractor, BandwidthTargetDataExtractor),
+    ConstantSkirtGainBandPassQ(ScaledFrequencyDataExtractor, QFactorDataExtractor),
+    ConstantPeakGainBandPass(ScaledFrequencyDataExtractor, BandwidthTargetDataExtractor),
+    ConstantPeakGainBandPassQ(ScaledFrequencyDataExtractor, QFactorDataExtractor),
+    Notch(ScaledFrequencyDataExtractor, BandwidthTargetDataExtractor),
     NotchQ(ScaledFrequencyDataExtractor, QFactorDataExtractor),
+    AllPass(ScaledFrequencyDataExtractor, BandwidthTargetDataExtractor),
+    AllPassQ(ScaledFrequencyDataExtractor, QFactorDataExtractor),
     Peak(
         ScaledFrequencyDataExtractor,
         GainDataExtractor,
-        OctaveTargetDataExtractor,
+        BandwidthTargetDataExtractor,
     ),
     PeakDB(
         ScaledFrequencyDataExtractor,
         DecibelGainDataExtractor,
-        OctaveTargetDataExtractor,
+        BandwidthTargetDataExtractor,
     ),
     PeakQ(
         ScaledFrequencyDataExtractor,
@@ -41,35 +47,15 @@ pub enum FilterConfiguration<
         DecibelGainDataExtractor,
         QFactorDataExtractor,
     ),
-    HighShelf(
-        ScaledFrequencyDataExtractor,
-        GainDataExtractor,
-        OctaveTargetDataExtractor,
-    ),
-    HighShelfDB(
-        ScaledFrequencyDataExtractor,
-        DecibelGainDataExtractor,
-        OctaveTargetDataExtractor,
-    ),
-    HighShelfQ(
-        ScaledFrequencyDataExtractor,
-        GainDataExtractor,
-        QFactorDataExtractor,
-    ),
-    HighShelfDBQ(
-        ScaledFrequencyDataExtractor,
-        DecibelGainDataExtractor,
-        QFactorDataExtractor,
-    ),
     LowShelf(
         ScaledFrequencyDataExtractor,
         GainDataExtractor,
-        OctaveTargetDataExtractor,
+        BandwidthTargetDataExtractor,
     ),
     LowShelfDB(
         ScaledFrequencyDataExtractor,
         DecibelGainDataExtractor,
-        OctaveTargetDataExtractor,
+        BandwidthTargetDataExtractor,
     ),
     LowShelfQ(
         ScaledFrequencyDataExtractor,
@@ -81,6 +67,26 @@ pub enum FilterConfiguration<
         DecibelGainDataExtractor,
         QFactorDataExtractor,
     ),
+    HighShelf(
+        ScaledFrequencyDataExtractor,
+        GainDataExtractor,
+        BandwidthTargetDataExtractor,
+    ),
+    HighShelfDB(
+        ScaledFrequencyDataExtractor,
+        DecibelGainDataExtractor,
+        BandwidthTargetDataExtractor,
+    ),
+    HighShelfQ(
+        ScaledFrequencyDataExtractor,
+        GainDataExtractor,
+        QFactorDataExtractor,
+    ),
+    HighShelfDBQ(
+        ScaledFrequencyDataExtractor,
+        DecibelGainDataExtractor,
+        QFactorDataExtractor,
+    ),
 }
 
 pub struct BiquadFilter<
@@ -88,14 +94,14 @@ pub struct BiquadFilter<
     Data,
     Parent,
     ScaledFrequencyDataExtractor,
-    OctaveTargetDataExtractor,
+    BandwidthTargetDataExtractor,
     QFactorDataExtractor,
     GainDataExtractor,
     DecibelGainDataExtractor,
 > where
     Parent: PipelineNode<CHANNELS, Data>,
     ScaledFrequencyDataExtractor: DataExtractor<Data, f64>,
-    OctaveTargetDataExtractor: DataExtractor<Data, f64>,
+    BandwidthTargetDataExtractor: DataExtractor<Data, f64>,
     QFactorDataExtractor: DataExtractor<Data, f64>,
     GainDataExtractor: DataExtractor<Data, f64>,
     DecibelGainDataExtractor: DataExtractor<Data, f64>,
@@ -105,12 +111,13 @@ pub struct BiquadFilter<
     configuration: FilterConfiguration<
         Data,
         ScaledFrequencyDataExtractor,
-        OctaveTargetDataExtractor,
+        BandwidthTargetDataExtractor,
         QFactorDataExtractor,
         GainDataExtractor,
         DecibelGainDataExtractor,
     >,
 
+    a0: f32,
     a1: f32,
     a2: f32,
 
@@ -129,7 +136,7 @@ impl<
     Data,
     Parent,
     ScaledFrequencyDataExtractor,
-    OctaveTargetDataExtractor,
+    BandwidthTargetDataExtractor,
     QFactorDataExtractor,
     GainDataExtractor,
     DecibelGainDataExtractor,
@@ -139,7 +146,7 @@ impl<
         Data,
         Parent,
         ScaledFrequencyDataExtractor,
-        OctaveTargetDataExtractor,
+        BandwidthTargetDataExtractor,
         QFactorDataExtractor,
         GainDataExtractor,
         DecibelGainDataExtractor,
@@ -147,7 +154,7 @@ impl<
 where
     Parent: PipelineNode<CHANNELS, Data>,
     ScaledFrequencyDataExtractor: DataExtractor<Data, f64>,
-    OctaveTargetDataExtractor: DataExtractor<Data, f64>,
+    BandwidthTargetDataExtractor: DataExtractor<Data, f64>,
     QFactorDataExtractor: DataExtractor<Data, f64>,
     GainDataExtractor: DataExtractor<Data, f64>,
     DecibelGainDataExtractor: DataExtractor<Data, f64>,
@@ -157,7 +164,7 @@ where
         configuration: FilterConfiguration<
             Data,
             ScaledFrequencyDataExtractor,
-            OctaveTargetDataExtractor,
+            BandwidthTargetDataExtractor,
             QFactorDataExtractor,
             GainDataExtractor,
             DecibelGainDataExtractor,
@@ -168,6 +175,7 @@ where
             parent,
             configuration,
 
+            a0: 0.0,
             a1: 0.0,
             a2: 0.0,
 
@@ -188,7 +196,7 @@ impl<
     Data,
     Parent,
     ScaledFrequencyDataExtractor,
-    OctaveTargetDataExtractor,
+    BandwidthTargetDataExtractor,
     QFactorDataExtractor,
     GainDataExtractor,
     DecibelGainDataExtractor,
@@ -198,7 +206,7 @@ impl<
         Data,
         Parent,
         ScaledFrequencyDataExtractor,
-        OctaveTargetDataExtractor,
+        BandwidthTargetDataExtractor,
         QFactorDataExtractor,
         GainDataExtractor,
         DecibelGainDataExtractor,
@@ -206,36 +214,462 @@ impl<
 where
     Parent: PipelineNode<CHANNELS, Data>,
     ScaledFrequencyDataExtractor: DataExtractor<Data, f64>,
-    OctaveTargetDataExtractor: DataExtractor<Data, f64>,
+    BandwidthTargetDataExtractor: DataExtractor<Data, f64>,
     QFactorDataExtractor: DataExtractor<Data, f64>,
     GainDataExtractor: DataExtractor<Data, f64>,
     DecibelGainDataExtractor: DataExtractor<Data, f64>,
 {
-    fn update(&mut self, _data: &Data) {
-        match self.configuration {
-            FilterConfiguration::Disabled(_) => {}
-            FilterConfiguration::LowPass(_, _) => {}
-            FilterConfiguration::LowPassQ(_, _) => {}
-            FilterConfiguration::HighPass(_, _) => {}
-            FilterConfiguration::HighPassQ(_, _) => {}
-            FilterConfiguration::BandPass(_, _) => {}
-            FilterConfiguration::BandPassQ(_, _) => {}
-            FilterConfiguration::AllPass(_, _) => {}
-            FilterConfiguration::AllPassQ(_, _) => {}
-            FilterConfiguration::Notch(_, _) => {}
-            FilterConfiguration::NotchQ(_, _) => {}
-            FilterConfiguration::Peak(_, _, _) => {}
-            FilterConfiguration::PeakDB(_, _, _) => {}
-            FilterConfiguration::PeakQ(_, _, _) => {}
-            FilterConfiguration::PeakDBQ(_, _, _) => {}
-            FilterConfiguration::HighShelf(_, _, _) => {}
-            FilterConfiguration::HighShelfDB(_, _, _) => {}
-            FilterConfiguration::HighShelfQ(_, _, _) => {}
-            FilterConfiguration::HighShelfDBQ(_, _, _) => {}
-            FilterConfiguration::LowShelf(_, _, _) => {}
-            FilterConfiguration::LowShelfDB(_, _, _) => {}
-            FilterConfiguration::LowShelfQ(_, _, _) => {}
-            FilterConfiguration::LowShelfDBQ(_, _, _) => {}
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::manual_midpoint
+    )]
+    fn update(&mut self, data: &Data) {
+        match &self.configuration {
+            FilterConfiguration::Disabled(_) => {
+                self.b0 = 1.0;
+                self.b1 = 0.0;
+                self.b2 = 0.0;
+                self.a0 = 1.0;
+                self.a1 = 0.0;
+                self.a2 = 0.0;
+            }
+            FilterConfiguration::LowPass(scaled_frequency_extractor, bandwidth_extractor) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                self.b0 = ((1.0 - omega_zero.cos()) / 2.0) as f32;
+                self.b1 = (1.0 - omega_zero.cos()) as f32;
+                self.b2 = ((1.0 - omega_zero.cos()) / 2.0) as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::LowPassQ(scaled_frequency_extractor, q_factor_extractor) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                self.b0 = ((1.0 - omega_zero.cos()) / 2.0) as f32;
+                self.b1 = (1.0 - omega_zero.cos()) as f32;
+                self.b2 = ((1.0 - omega_zero.cos()) / 2.0) as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::HighPass(scaled_frequency_extractor, bandwidth_extractor) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                self.b0 = ((1.0 + omega_zero.cos()) / 2.0) as f32;
+                self.b1 = -(1.0 + omega_zero.cos()) as f32;
+                self.b2 = ((1.0 + omega_zero.cos()) / 2.0) as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::HighPassQ(scaled_frequency_extractor, q_factor_extractor) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                self.b0 = ((1.0 + omega_zero.cos()) / 2.0) as f32;
+                self.b1 = -(1.0 + omega_zero.cos()) as f32;
+                self.b2 = ((1.0 + omega_zero.cos()) / 2.0) as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::ConstantSkirtGainBandPass(
+                scaled_frequency_extractor,
+                bandwidth_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                self.b0 = (omega_zero.sin() / 2.0) as f32;
+                self.b1 = 0.0;
+                self.b2 = -(omega_zero.sin() / 2.0) as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::ConstantSkirtGainBandPassQ(
+                scaled_frequency_extractor,
+                q_factor_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                self.b0 = (omega_zero.sin() / 2.0) as f32;
+                self.b1 = 0.0;
+                self.b2 = -(omega_zero.sin() / 2.0) as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::ConstantPeakGainBandPass(
+                scaled_frequency_extractor,
+                bandwidth_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                self.b0 = alpha as f32;
+                self.b1 = 0.0;
+                self.b2 = -alpha as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::ConstantPeakGainBandPassQ(
+                scaled_frequency_extractor,
+                q_factor_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                self.b0 = alpha as f32;
+                self.b1 = 0.0;
+                self.b2 = -alpha as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::Notch(scaled_frequency_extractor, bandwidth_extractor) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                self.b0 = 1.0;
+                self.b1 = (-2.0 * omega_zero.cos()) as f32;
+                self.b2 = 1.0;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::NotchQ(scaled_frequency_extractor, q_factor_extractor) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                self.b0 = 1.0;
+                self.b1 = (-2.0 * omega_zero.cos()) as f32;
+                self.b2 = 1.0;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::AllPass(scaled_frequency_extractor, bandwidth_extractor) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                self.b0 = (1.0 - alpha) as f32;
+                self.b1 = (-2.0 * omega_zero.cos()) as f32;
+                self.b2 = (1.0 + alpha) as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::AllPassQ(scaled_frequency_extractor, q_factor_extractor) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                self.b0 = (1.0 - alpha) as f32;
+                self.b1 = (-2.0 * omega_zero.cos()) as f32;
+                self.b2 = (1.0 + alpha) as f32;
+                self.a0 = (1.0 + alpha) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - alpha) as f32;
+            }
+            FilterConfiguration::Peak(
+                scaled_frequency_extractor,
+                gain_extractor,
+                bandwidth_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                let gain = (gain_extractor)(data);
+
+                self.b0 = (1.0 + (alpha * gain)) as f32;
+                self.b1 = (-2.0 * omega_zero.cos()) as f32;
+                self.b2 = (1.0 - (alpha * gain)) as f32;
+                self.a0 = (1.0 + (alpha / gain)) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - (alpha / gain)) as f32;
+            }
+            FilterConfiguration::PeakDB(
+                scaled_frequency_extractor,
+                db_extractor,
+                bandwidth_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                let gain = calculate_sqrt_gain((db_extractor)(data));
+
+                self.b0 = (1.0 + (alpha * gain)) as f32;
+                self.b1 = (-2.0 * omega_zero.cos()) as f32;
+                self.b2 = (1.0 - (alpha * gain)) as f32;
+                self.a0 = (1.0 + (alpha / gain)) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - (alpha / gain)) as f32;
+            }
+            FilterConfiguration::PeakQ(
+                scaled_frequency_extractor,
+                gain_extractor,
+                q_factor_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                let gain = (gain_extractor)(data);
+
+                self.b0 = (1.0 + (alpha * gain)) as f32;
+                self.b1 = (-2.0 * omega_zero.cos()) as f32;
+                self.b2 = (1.0 - (alpha * gain)) as f32;
+                self.a0 = (1.0 + (alpha / gain)) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - (alpha / gain)) as f32;
+            }
+            FilterConfiguration::PeakDBQ(
+                scaled_frequency_extractor,
+                db_extractor,
+                q_factor_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                let gain = calculate_sqrt_gain((db_extractor)(data));
+
+                self.b0 = (1.0 + (alpha * gain)) as f32;
+                self.b1 = (-2.0 * omega_zero.cos()) as f32;
+                self.b2 = (1.0 - (alpha * gain)) as f32;
+                self.a0 = (1.0 + (alpha / gain)) as f32;
+                self.a1 = (-2.0 * omega_zero.cos()) as f32;
+                self.a2 = (1.0 - (alpha / gain)) as f32;
+            }
+            FilterConfiguration::LowShelf(
+                scaled_frequency_extractor,
+                gain_extractor,
+                bandwidth_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                let gain = (gain_extractor)(data);
+
+                self.b0 = (gain
+                    * ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
+                        + (2.0 * gain.sqrt() * alpha))) as f32;
+                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b2 = (gain
+                    * ((gain + 1.0)
+                        - ((gain - 1.0) * omega_zero.cos())
+                        - (2.0 * gain.sqrt() * alpha))) as f32;
+                self.a0 = ((gain + 1.0)
+                    + ((gain - 1.0) * omega_zero.cos())
+                    + (2.0 * gain.sqrt() * alpha)) as f32;
+                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a2 = ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
+                    - (2.0 * gain.sqrt() * alpha)) as f32;
+            }
+            FilterConfiguration::LowShelfDB(
+                scaled_frequency_extractor,
+                db_extractor,
+                bandwidth_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                let gain = calculate_sqrt_gain((db_extractor)(data));
+
+                self.b0 = (gain
+                    * ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
+                        + (2.0 * gain.sqrt() * alpha))) as f32;
+                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b2 = (gain
+                    * ((gain + 1.0)
+                        - ((gain - 1.0) * omega_zero.cos())
+                        - (2.0 * gain.sqrt() * alpha))) as f32;
+                self.a0 = ((gain + 1.0)
+                    + ((gain - 1.0) * omega_zero.cos())
+                    + (2.0 * gain.sqrt() * alpha)) as f32;
+                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a2 = ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
+                    - (2.0 * gain.sqrt() * alpha)) as f32;
+            }
+            FilterConfiguration::LowShelfQ(
+                scaled_frequency_extractor,
+                gain_extractor,
+                q_factor_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                let gain = (gain_extractor)(data);
+
+                self.b0 = (gain
+                    * ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
+                        + (2.0 * gain.sqrt() * alpha))) as f32;
+                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b2 = (gain
+                    * ((gain + 1.0)
+                        - ((gain - 1.0) * omega_zero.cos())
+                        - (2.0 * gain.sqrt() * alpha))) as f32;
+                self.a0 = ((gain + 1.0)
+                    + ((gain - 1.0) * omega_zero.cos())
+                    + (2.0 * gain.sqrt() * alpha)) as f32;
+                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a2 = ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
+                    - (2.0 * gain.sqrt() * alpha)) as f32;
+            }
+            FilterConfiguration::LowShelfDBQ(
+                scaled_frequency_extractor,
+                db_extractor,
+                q_factor_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                let gain = calculate_sqrt_gain((db_extractor)(data));
+
+                self.b0 = (gain
+                    * ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
+                        + (2.0 * gain.sqrt() * alpha))) as f32;
+                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b2 = (gain
+                    * ((gain + 1.0)
+                        - ((gain - 1.0) * omega_zero.cos())
+                        - (2.0 * gain.sqrt() * alpha))) as f32;
+                self.a0 = ((gain + 1.0)
+                    + ((gain - 1.0) * omega_zero.cos())
+                    + (2.0 * gain.sqrt() * alpha)) as f32;
+                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a2 = ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
+                    - (2.0 * gain.sqrt() * alpha)) as f32;
+            }
+            FilterConfiguration::HighShelf(
+                scaled_frequency_extractor,
+                gain_extractor,
+                bandwidth_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                let gain = (gain_extractor)(data);
+
+                self.b0 = (gain
+                    * ((gain + 1.0)
+                        + ((gain - 1.0) * omega_zero.cos())
+                        + (2.0 * gain.sqrt() * alpha))) as f32;
+                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b2 = (gain
+                    * ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
+                        - (2.0 * gain.sqrt() * alpha))) as f32;
+                self.a0 = ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
+                    + (2.0 * gain.sqrt() * alpha)) as f32;
+                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a2 = ((gain + 1.0)
+                    - ((gain - 1.0) * omega_zero.cos())
+                    - (2.0 * gain.sqrt() * alpha)) as f32;
+            }
+            FilterConfiguration::HighShelfDB(
+                scaled_frequency_extractor,
+                db_extractor,
+                bandwidth_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_bandwidth(omega_zero, (bandwidth_extractor)(data));
+
+                let gain = calculate_sqrt_gain((db_extractor)(data));
+
+                self.b0 = (gain
+                    * ((gain + 1.0)
+                        + ((gain - 1.0) * omega_zero.cos())
+                        + (2.0 * gain.sqrt() * alpha))) as f32;
+                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b2 = (gain
+                    * ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
+                        - (2.0 * gain.sqrt() * alpha))) as f32;
+                self.a0 = ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
+                    + (2.0 * gain.sqrt() * alpha)) as f32;
+                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a2 = ((gain + 1.0)
+                    - ((gain - 1.0) * omega_zero.cos())
+                    - (2.0 * gain.sqrt() * alpha)) as f32;
+            }
+            FilterConfiguration::HighShelfQ(
+                scaled_frequency_extractor,
+                gain_extractor,
+                q_factor_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                let gain = (gain_extractor)(data);
+
+                self.b0 = (gain
+                    * ((gain + 1.0)
+                        + ((gain - 1.0) * omega_zero.cos())
+                        + (2.0 * gain.sqrt() * alpha))) as f32;
+                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b2 = (gain
+                    * ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
+                        - (2.0 * gain.sqrt() * alpha))) as f32;
+                self.a0 = ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
+                    + (2.0 * gain.sqrt() * alpha)) as f32;
+                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a2 = ((gain + 1.0)
+                    - ((gain - 1.0) * omega_zero.cos())
+                    - (2.0 * gain.sqrt() * alpha)) as f32;
+            }
+            FilterConfiguration::HighShelfDBQ(
+                scaled_frequency_extractor,
+                db_extractor,
+                q_factor_extractor,
+            ) => {
+                let omega_zero = calculate_omega_zero((scaled_frequency_extractor)(data));
+
+                let alpha = calculate_alpha_with_q_factor(omega_zero, (q_factor_extractor)(data));
+
+                let gain = calculate_sqrt_gain((db_extractor)(data));
+
+                self.b0 = (gain
+                    * ((gain + 1.0)
+                        + ((gain - 1.0) * omega_zero.cos())
+                        + (2.0 * gain.sqrt() * alpha))) as f32;
+                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b2 = (gain
+                    * ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
+                        - (2.0 * gain.sqrt() * alpha))) as f32;
+                self.a0 = ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
+                    + (2.0 * gain.sqrt() * alpha)) as f32;
+                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a2 = ((gain + 1.0)
+                    - ((gain - 1.0) * omega_zero.cos())
+                    - (2.0 * gain.sqrt() * alpha)) as f32;
+            }
         }
     }
 
@@ -251,8 +685,11 @@ where
             .zip(&mut self.y1)
             .zip(&mut self.y2)
         {
-            let y0 =
-                *input * self.b0 + *x1 * self.b1 + *x2 * self.b2 - *y1 * self.a1 - *y2 * self.a2;
+            let y0 = ((self.b0 / self.a0) * *input)
+                + ((self.b1 / self.a0) * *x1)
+                + ((self.b2 / self.a0) * *x2)
+                - ((self.a1 / self.a0) * *y1)
+                - ((self.a2 / self.a0) * *y2);
 
             *y2 = *y1;
             *y1 = y0;
@@ -273,4 +710,20 @@ where
 
         self.parent.reset();
     }
+}
+
+fn calculate_sqrt_gain(db_gain: f64) -> f64 {
+    10.0f64.pow(db_gain / 40.0)
+}
+
+fn calculate_omega_zero(scaled_frequency: f64) -> f64 {
+    2.0 * PI * scaled_frequency
+}
+
+fn calculate_alpha_with_q_factor(omega_zero: f64, q: f64) -> f64 {
+    omega_zero.sin() / (2.0 * q)
+}
+
+fn calculate_alpha_with_bandwidth(omega_zero: f64, bandwidth: f64) -> f64 {
+    omega_zero.sin() * ((2.0f64.log2() / 2.0) * bandwidth * (omega_zero / omega_zero.sin())).sinh()
 }

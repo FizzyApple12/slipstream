@@ -91,11 +91,8 @@ impl PlayerDSP {
             player_update_results.playback_frame_start_time,
             player_update_results.playback_frame_end_time,
             player_update_results.playback_wrap_times,
-            if channel_state.master_tempo && !(channel_state.jog_hold || channel_state.jog_wait) {
-                Some(channel_state.keyshift)
-            } else {
-                None
-            },
+            channel_state.master_tempo && !(channel_state.jog_hold || channel_state.jog_wait),
+            channel_state.keyshift,
             output_buffers,
             number_samples,
         );
@@ -131,11 +128,8 @@ impl PlayerDSP {
             touch_cue_start_time,
             touch_cue_end_time,
             None,
-            if channel_state.master_tempo {
-                Some(channel_state.keyshift)
-            } else {
-                None
-            },
+            true,
+            channel_state.keyshift,
             output_buffers,
             number_samples,
         );

@@ -256,7 +256,8 @@ pub fn player_tempo_range_press(deck_state: &mut DeckState, channel: usize) {
             TempoRange::SixPercent => TempoRange::TenPercent,
             TempoRange::TenPercent => TempoRange::SixteenPercent,
             TempoRange::SixteenPercent => TempoRange::OneHundredPercent,
-            TempoRange::OneHundredPercent => TempoRange::SixPercent,
+            TempoRange::OneHundredPercent => TempoRange::YesPercent,
+            TempoRange::YesPercent => TempoRange::SixPercent,
         };
 
         channel.player.tempo_slider_is_accurate = false;
@@ -288,6 +289,12 @@ pub fn player_beat_loop_in_press(deck_state: &mut DeckState, channel: usize) {
             } else {
                 channel.player.time
             };
+
+            if let Some(loop_end) = channel.player.beat_loop_end
+                && loop_start_time >= loop_end
+            {
+                channel.player.beat_loop_end = None;
+            }
 
             channel.player.beat_loop_start = Some(loop_start_time);
         }
@@ -321,6 +328,12 @@ pub fn player_beat_loop_out_press(deck_state: &mut DeckState, channel: usize) {
             } else {
                 channel.player.time
             };
+
+            if let Some(loop_start) = channel.player.beat_loop_start
+                && loop_end_time <= loop_start
+            {
+                channel.player.beat_loop_start = None;
+            }
 
             channel.player.beat_loop_end = Some(loop_end_time);
         }

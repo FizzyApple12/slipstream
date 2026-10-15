@@ -1,13 +1,6 @@
 extern crate macro_helpers;
-use libdj::types::deck::DeckState;
 use macro_helpers::EnumStrConverters;
 use rkyv::{Archive, Deserialize, Serialize};
-
-#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
-pub enum ControllerMessage {
-    UpdateDeckState(DeckState),
-    UpdateCurrentSamples([f32; 4]),
-}
 
 #[derive(Clone, Copy, Archive, Serialize, Deserialize, Debug, EnumStrConverters)]
 pub enum ControllerEvent {

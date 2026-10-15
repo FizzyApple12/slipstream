@@ -78,6 +78,7 @@ mod qobject {
         TenPercent,
         SixteenPercent,
         OneHundredPercent,
+        YesPercent,
     }
 
     #[qml_element]
@@ -383,6 +384,7 @@ mod qobject {
         #[qml_element]
         #[qproperty(bool, source_open)]
         #[qproperty(BrowserPage, browser_page)]
+        #[qproperty(BrowserPage, last_browser_page)]
         #[qproperty(*mut SourceListModel, source_index)]
         #[qproperty(*mut BrowserListModel, browser_index)]
         #[qproperty(bool, device_selected)]
@@ -730,6 +732,7 @@ impl qobject::EngineBridgeDeck {
 pub struct EngineBridgeRust {
     pub source_open: bool,
     pub browser_page: BrowserPage,
+    pub last_browser_page: BrowserPage,
 
     pub source_index: *mut SourceListModel,
 
@@ -783,6 +786,7 @@ impl cxx_qt::Constructor<()> for qobject::EngineBridge {
         EngineBridgeRust {
             source_open: false,
             browser_page: BrowserPage::Closed,
+            last_browser_page: BrowserPage::Track,
 
             source_index: std::ptr::null_mut(),
 
@@ -1012,8 +1016,10 @@ impl qobject::EngineBridge {
                     self.as_mut().rebuild_browse_index(device_manager);
                 }
                 UIControlEvent::BrowserBrowsePress => {
+                    let last_browser_page = self.last_browser_page;
+
                     self.as_mut()
-                        .select_browser_page_internal(BrowserPage::Track, device_manager);
+                        .select_browser_page_internal(last_browser_page, device_manager);
                 }
                 UIControlEvent::BrowserPlaylistPress => {
                     self.as_mut()
@@ -1078,6 +1084,7 @@ impl qobject::EngineBridge {
     ) {
         if self.as_mut().browser_page == BrowserPage::Closed {
             self.as_mut().set_browser_page(page);
+            self.as_mut().set_last_browser_page(page);
 
             if !self.as_mut().device_selected {
                 self.as_mut().set_source_open(true);
@@ -1089,6 +1096,7 @@ impl qobject::EngineBridge {
                 self.as_mut().set_browser_page(BrowserPage::Closed);
             }
         } else if self.as_mut().browser_page != page {
+            self.as_mut().set_last_browser_page(page);
             self.as_mut().set_browser_page(page);
         }
 
@@ -1912,6 +1920,7 @@ impl qobject::EngineBridge {
                     libdj::types::deck::TempoRange::OneHundredPercent => {
                         TempoRange::OneHundredPercent
                     }
+                    libdj::types::deck::TempoRange::YesPercent => TempoRange::YesPercent,
                 });
             player_pin
                 .as_mut()

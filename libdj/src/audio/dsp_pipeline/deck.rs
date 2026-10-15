@@ -70,7 +70,10 @@ impl DeckDSP {
         }
 
         for (buffer_index, master_output_buffer) in master_output_buffers.iter_mut().enumerate() {
-            for (sample_number, sample) in master_output_buffer.iter_mut().enumerate() {
+            for (sample_number, sample) in master_output_buffer[0..number_samples]
+                .iter_mut()
+                .enumerate()
+            {
                 *sample = self.master_output_buffers[0][buffer_index][sample_number].crossfade(
                     deck_state.crossfade,
                     deck_state.mixer_channels[0].cross_fader_side,
@@ -88,7 +91,9 @@ impl DeckDSP {
         }
 
         for (buffer_index, cue_output_buffer) in cue_output_buffers.iter_mut().enumerate() {
-            for (sample_number, sample) in cue_output_buffer.iter_mut().enumerate() {
+            for (sample_number, sample) in
+                cue_output_buffer[0..number_samples].iter_mut().enumerate()
+            {
                 *sample = self.cue_output_buffers[0][buffer_index][sample_number]
                     + self.cue_output_buffers[1][buffer_index][sample_number]
                     + self.cue_output_buffers[2][buffer_index][sample_number]

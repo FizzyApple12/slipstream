@@ -14,6 +14,7 @@ criterion.workspace = true
 timecode = { path = "../timecode" }
 cpal = { version = "0.18.2", features = [ "pipewire" ], optional = true }
 libdsp = { path = "../libdsp", optional = true }
+phase-vocoder-testing = { path = "../../phase-vocoder-testing" }
 
 alsa-sys.version = "0.4.0"
 alsa.version = "0.11"

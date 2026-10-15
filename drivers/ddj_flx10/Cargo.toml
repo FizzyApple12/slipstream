@@ -1,0 +1,25 @@
+[package]
+name = "ddj_flx10"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+log.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+fern = { version = "0.7", features = [ "colored" ] }
+humantime = "2.4.0"
+libio = { path = "../../libio" }
+libdj = { path = "../../libdj" }
+timecode = { path = "../../timecode" }
+interprocess = { version = "2.4.0", features = ["tokio"] }
+rkyv.workspace = true
+base64.workspace = true
+midir = { version = "0.11.0", features = [ ] }
+
+[features]
+debug_log = []
+
+[lints]
+workspace = true

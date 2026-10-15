@@ -33,24 +33,23 @@ const MIN_LOOP_SIZE_NANOSECONDS: i64 = 1_000_000;
 pub const MIXER_CHANNELS: usize = 4;
 pub const AUDIO_CHANNELS: usize = 2;
 
-pub const BASE_GAIN_DB: f32 = -14.0;
-
 pub const MIXER_MIN_FREQUENCY: f32 = 0.0;
 pub const MIXER_MAX_FREQUENCY: f32 = 22000.0;
 
-pub const MIXER_EQ_LOW_CUTOFF: f64 = 500.0;
-pub const MIXER_EQ_LOW_OCTAVES: f64 = 2.0;
+// pub const MIXER_EQ_LOW_CUTOFF: f64 = 500.0;
+pub const MIXER_EQ_LOW_CUTOFF: f64 = 150.0;
+pub const MIXER_EQ_LOW_OCTAVES: f64 = 1.899_968_626_952_991_6;
 
 pub const MIXER_EQ_MID_CENTER: f64 = 1000.0;
-pub const MIXER_EQ_MID_Q: f64 = 0.7;
+pub const MIXER_EQ_MID_Q: f64 = 0.707;
 
-pub const MIXER_EQ_HIGH_CUTOFF: f64 = 5000.0;
+pub const MIXER_EQ_HIGH_CUTOFF: f64 = 8000.0;
 pub const MIXER_EQ_HIGH_OCTAVES: f64 = 1.899_968_626_952_991_6;
 
 pub const MIXER_FILTER_LOW_PASS_OCTAVES: f64 = 1.899_968_626_952_991_6;
 pub const MIXER_FILTER_HIGH_PASS_OCTAVES: f64 = 1.899_968_626_952_991_6;
 
-pub const MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH: usize = 128;
+pub const MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH: usize = 32;
 
 pub struct PathBufAsString;
 

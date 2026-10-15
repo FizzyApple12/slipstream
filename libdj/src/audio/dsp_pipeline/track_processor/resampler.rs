@@ -30,7 +30,6 @@ impl Resampler {
         input_samples: usize,
         output: &mut [Vec<f32>; AUDIO_CHANNELS],
         output_samples: usize,
-        do_mult: bool,
     ) {
         if output_samples == 0 {
             return;
@@ -80,7 +79,7 @@ impl Resampler {
                         read(base_index + 2),
                     ],
                     fract,
-                ) * if do_mult { 8000.0 } else { 1.0 };
+                );
             }
 
             self.history[channel_number] = [

@@ -4,13 +4,13 @@ pub mod logger;
 pub mod statuses;
 pub mod waveform_loader;
 
-use std::{array, pin::Pin};
+use std::{array, pin::Pin, time::Duration};
 
 use cxx_qt_lib::{QFont, QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 use libdatabase::device_manager::DeviceManager;
 use libdj::{AUDIO_CHANNELS, engine::DJEngine};
-use libio::{controller::Controller, types::controller::ControllerMessage};
-use log::{debug, info, warn};
+use libio::ipc::{HostIPC, IPCMessage};
+use log::{debug, info};
 use tokio::task;
 
 use crate::{
@@ -22,6 +22,12 @@ use crate::{
 const LOCAL_AUTOMOUNTS: [(&str, usize); 2] = [("/djusb/usb0", 0), ("/djusb/usb1", 1)];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Safety: This happens before any additional threads get spawned
+    unsafe {
+        std::env::set_var("QT_IM_MODULE", "qtvirtualkeyboard");
+        std::env::set_var("QT_VIRTUALKEYBOARD_STYLE", "slipstream");
+    };
+
     setup_logger()?;
 
     info!("Starting tokio runtime...");
@@ -31,33 +37,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?;
 
-    debug!("Entering tokio to start managers");
-
-    let enter_handle = runtime.enter();
-
     debug!("Starting IO Manager...");
 
-    let (controller_event_sender, mut controller_event_receiver) =
-        tokio::sync::mpsc::unbounded_channel();
+    let mut host_ipc = runtime.block_on(HostIPC::listen())?;
 
-    // todo: this needs to be replaced with a proper io manager
-    let mut controller = Controller::default();
-
-    'controller_init: {
-        if let Err(err) = controller.open_midi_input() {
-            warn!("Failed to find MIDI input for testing, MIDI has been disabled: {err}");
-            break 'controller_init;
-        }
-        if let Err(err) = controller.open_midi_output() {
-            warn!("Failed to find MIDI output for testing, MIDI has been disabled: {err}");
-            break 'controller_init;
-        }
-
-        if let Err(err) = controller.start(controller_event_sender) {
-            warn!("Failed to start MIDI processing, MIDI has been disabled: {err}");
-            break 'controller_init;
-        }
-    }
+    let enter_handle = runtime.enter();
 
     debug!("Starting Device Manager...");
 
@@ -76,40 +60,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::sync::mpsc::unbounded_channel();
 
     task::spawn(async move {
+        host_ipc.select_driver_id(Some("ddj_flx10".to_string()));
+
+        let mut host_ipc_handle = host_ipc.subscribe();
+
         loop {
             tokio::select! {
-                controller_event = controller_event_receiver.recv() => {
-                    if let Some(event) = controller_event {
-                        match map_controller_event(event) {
-                            MappedEvent::UIControlEvent(ui_control_event) => {
-                                let _ = ui_control_event_sender.send(ui_control_event);
-                            },
-                            MappedEvent::DeckControlEvent(deck_control_event) => {
-                                relay_engine_handle.send_control_event(deck_control_event);
-                            },
-                        }
+                new_driver = host_ipc_handle.listen_for_driver_change() => {
+                    if new_driver.is_none() {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+
+                        host_ipc.select_driver_id(Some("ddj_flx10".to_string()));
                     }
                 }
-                _ = relay_engine_handle.wait_for_new_deck_state_changed() => {
+                controller_event = host_ipc.receive_event() => {
+                    match map_controller_event(controller_event) {
+                        MappedEvent::UIControlEvent(ui_control_event) => {
+                            let _ = ui_control_event_sender.send(ui_control_event);
+                        },
+                        MappedEvent::DeckControlEvent(deck_control_event) => {
+                            relay_engine_handle.send_control_event(deck_control_event);
+                        },
+                    }
+                }
+                () = relay_engine_handle.wait_for_new_deck_state_changed() => {
                     let new_deck_state = relay_engine_handle.get_deck_state().clone();
 
                     #[allow(clippy::cast_precision_loss)]
-                    let _ = controller.send(ControllerMessage::UpdateCurrentSamples(array::from_fn(
+                    let _ = host_ipc.send_message(IPCMessage::UpdateCurrentMeter(array::from_fn(
                         |index| {
                             new_deck_state
                                 .mixer_channels
                                 .get(index)
-                                .map_or(0.0, |channel| {
+                                .map_or([0.0; AUDIO_CHANNELS], |channel| {
                                     channel
                                         .average_amplitude
-                                        .iter()
-                                        .fold(0.0, |accumulator, amplitude| accumulator + amplitude)
-                                        / AUDIO_CHANNELS as f32
                                 })
                         },
                     )));
 
-                    let _ = controller.send(ControllerMessage::UpdateDeckState(new_deck_state));
+                    let _ = host_ipc.send_message(IPCMessage::UpdateDeckState(new_deck_state));
                 }
             }
         }
@@ -125,11 +115,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui_control_event_receiver,
         handle,
     );
-
-    unsafe {
-        std::env::set_var("QT_IM_MODULE", "qtvirtualkeyboard");
-        std::env::set_var("QT_VIRTUALKEYBOARD_STYLE", "slipstream");
-    };
 
     let mut app = QGuiApplication::new();
 

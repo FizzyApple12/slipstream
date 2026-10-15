@@ -291,6 +291,8 @@ Rectangle {
                                     return "± 16%";
                                 case TempoRange.OneHundredPercent:
                                     return "± 100%";
+                                case TempoRange.YesPercent:
+                                    return "± YES%";
                                 default:
                                     return "± ???%";
                                 }

@@ -175,7 +175,7 @@ FlexboxLayout {
                 sourceSize.width: 200
                 sourceSize.height: 200
 
-                source: "qrc:/icons/fizzyengineering.svg"
+                source: "qrc:/icons/logo.svg"
             }
 
             Text {
