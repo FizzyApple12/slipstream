@@ -164,13 +164,17 @@ impl ChannelDSP {
             *master_right = right_filtered.fade(channel_state.fade);
         }
 
+        let [touch_cue_left, touch_cue_right] = &mut self.local_touch_cue_output_buffers;
         let [cue_left, cue_right] = cue_output_buffers;
 
-        for (((local_left, local_right), master_left), master_right) in cue_left[0..number_samples]
-            .iter_mut()
-            .zip(cue_right[0..number_samples].iter_mut())
-            .zip(master_left[0..number_samples].iter_mut())
-            .zip(master_right[0..number_samples].iter_mut())
+        for (((((cue_left, cue_right), local_left), local_right), master_left), master_right) in
+            cue_left[0..number_samples]
+                .iter_mut()
+                .zip(cue_right[0..number_samples].iter_mut())
+                .zip(touch_cue_left[0..number_samples].iter_mut())
+                .zip(touch_cue_right[0..number_samples].iter_mut())
+                .zip(local_master_left[0..number_samples].iter_mut())
+                .zip(local_master_right[0..number_samples].iter_mut())
         {
             let root_sample = [*local_left, *local_right];
 
@@ -189,9 +193,8 @@ impl ChannelDSP {
                 high_filtered
             };
 
-            *local_left = left_filtered.fade(channel_state.fade)
-                + if channel_state.cue { *master_left } else { 0.0 };
-            *local_right = right_filtered.fade(channel_state.fade)
+            *cue_left = left_filtered + if channel_state.cue { *master_left } else { 0.0 };
+            *cue_right = right_filtered
                 + if channel_state.cue {
                     *master_right
                 } else {
