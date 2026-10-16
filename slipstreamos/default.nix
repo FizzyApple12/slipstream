@@ -16,13 +16,48 @@ nixos-raspberrypi.lib.nixosSystem {
         ./configtxt.nix
       ];
     })
+    ({lib, ... }:
+    let
+      inherit (lib) mkDefault;
+    in
+    {
+      documentation = {
+        enable = mkDefault false;
+        doc.enable = mkDefault false;
+        info.enable = mkDefault false;
+        man.enable = mkDefault false;
+        nixos.enable = mkDefault false;
+      };
+
+      environment = {
+        defaultPackages = mkDefault [ ];
+        stub-ld.enable = mkDefault false;
+      };
+
+      programs = {
+        command-not-found.enable = mkDefault false;
+        fish.generateCompletions = mkDefault false;
+      };
+
+      services = {
+        logrotate.enable = mkDefault false;
+        udisks2.enable = mkDefault false;
+      };
+
+      xdg = {
+        autostart.enable = mkDefault false;
+        icons.enable = mkDefault false;
+        mime.enable = mkDefault false;
+        sounds.enable = mkDefault false;
+      };
+    })
     ({lib, ...}: {
       time = {
         timeZone = "UTC";
       };
 
       networking = {
-        hostName = "djs1";
+        hostName = "slipstream";
       };
 
       boot = {
@@ -59,19 +94,24 @@ nixos-raspberrypi.lib.nixosSystem {
         ];
       };
 
-      users.users.dj = {
-        initialPassword = "thisIsMyMusic";
-        isNormalUser = true;
-        extraGroups = [
-          "wheel"
-          "networkmanager"
-          "gpio"
-          "i2c"
-          "input"
-          "plugdev"
-          "spi"
-          "video"
-        ];
+      users = {
+      	mutableUsers = false;
+
+      	users.dj = {
+      	  initialPassword = "thisIsMyMusic";
+      	  isNormalUser = true;
+
+      	  extraGroups = [
+      	    "wheel"
+      	    "networkmanager"
+      	    "gpio"
+      	    "i2c"
+      	    "input"
+      	    "plugdev"
+      	    "spi"
+      	    "video"
+      	  ];
+       	};
       };
 
       services = {
@@ -92,12 +132,14 @@ nixos-raspberrypi.lib.nixosSystem {
       };
 
       nix = {
-      	settings = {
-          trusted-users = ["dj"];
-        };
+     	enable = false;
       };
 
       system = {
+      	switch = {
+       	  enable = false;
+        };
+
       	stateVersion = "26.11";
       };
     })
@@ -125,6 +167,18 @@ nixos-raspberrypi.lib.nixosSystem {
               ExecStart = pkgs.writeShellScript "dj-usb-mkdir.sh" ''
                 ${pkgs.coreutils}/bin/mkdir -p /djusb/usb0 /djusb/usb1
                 ${pkgs.coreutils}/bin/chown dj:users /djusb /djusb/usb0 /djusb/usb1
+              '';
+            };
+          };
+          ddj-flx10-driver = {
+            enable = true;
+            after = [ "multi-user.target" ];
+            wantedBy = [ "default.target" ];
+            description = "Run the DDJ-FLX10 driver";
+            serviceConfig = {
+              Type = "simple";
+              ExecStart = pkgs.writeShellScript "ddj_flx10.sh" ''
+              	${slipstream-embedded.outPath}/bin/ddj_flx10
               '';
             };
           };

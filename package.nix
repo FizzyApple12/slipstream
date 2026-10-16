@@ -10,6 +10,7 @@
   llvmPackages,
   fontconfig,
   vulkan-loader,
+  libglvnd,
   libxkbcommon,
   xorg,
   wayland,
@@ -18,6 +19,7 @@
   alsa-lib,
   libjack2,
   pipewire,
+  qt6
 }:
 let
   rustToolchain = "nightly-2026-07-19";
@@ -30,6 +32,13 @@ let
   	rustc = fenixToolchain.rustc;
     cargo = fenixToolchain.cargo;
   };
+  qtEnv = with qt6; env "qt-custom-${qtbase.version}" [
+    qtdeclarative
+    qtwayland
+    qtshadertools
+    qtsvg
+    qtvirtualkeyboard
+  ];
 in
 rustPlatform.buildRustPackage {
   pname = "slipstream-embedded";
@@ -40,10 +49,6 @@ rustPlatform.buildRustPackage {
     lockFile = ./Cargo.lock;
     outputHashes = {
       "rekordcrate-0.3.0" = "sha256-bOcjGdotVeLDn/0kqlLOR1t5lABuNk401Ky/oP2B4yI=";
-      "collections-0.1.0" = "sha256-AAoSoA1jHMFu2x5xcg/DHj2xkc1zi0OG3UEMBXVMVWA=";
-      "wasm_thread-0.3.3" = "sha256-+lRLCIk0S6Y5ORYjDKsYYHia2FtoSoh+rWkQh7mnPBE=";
-      "zed-font-kit-0.14.1-zed" = "sha256-KXygi0olNQi5yM8eaJVykNDtbPMDjT+cWPBF8UrtXR4=";
-      "zed-scap-0.0.8-zed" = "sha256-BihiQHlal/eRsktyf0GI3aSWsUCW7WcICMsC2Xvb7kw=";
     };
   };
 
@@ -53,6 +58,7 @@ rustPlatform.buildRustPackage {
 
     fontconfig
     vulkan-loader
+    libglvnd
 
     libxkbcommon
     xorg.libxcb
@@ -70,6 +76,8 @@ rustPlatform.buildRustPackage {
     libjack2
     pipewire
     pipewire.jack
+
+    qtEnv
   ];
 
   nativeBuildInputs = [
@@ -78,6 +86,8 @@ rustPlatform.buildRustPackage {
 
     clang
     llvmPackages.bintools
+
+    qtEnv
   ];
 
   RUSTC_VERSION = rustToolchain;
