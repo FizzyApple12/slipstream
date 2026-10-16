@@ -1,0 +1,13 @@
+[package]
+name = "phase-vocoder-testing"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+num = "0.4.3"
+num-complex = { version = "0.4.3", features = ["bytemuck"] }
+bytemuck = { version = "1", features = ["derive"] }
+symphonia = { version = "0.5.5", features = [ "opt-simd", "all-codecs", "all-formats" ] }
+symphonia-core = "0.5.5"
+rustfft = "6.4.1"
+hound = "3.5.1"

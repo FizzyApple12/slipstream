@@ -4,7 +4,7 @@ pub mod resampler;
 use std::{array, f32};
 
 use libdsp::audio_loader::TrackAudioData;
-use phase_vocoder_testing::stretcher::{Config, Stretcher};
+use phase_vocoder_testing::{Config, Stretcher};
 use timecode::Timecode;
 
 use crate::{AUDIO_CHANNELS, audio::dsp_pipeline::track_processor::resampler::Resampler};

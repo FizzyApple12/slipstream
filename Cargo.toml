@@ -5,10 +5,12 @@ members = [
     "libdatabase",
     "libdj",
     "libdsp",
+    "phase-vocoder-testing",
     "libio",
     "timecode",
-    "macro-helpers"
-, "drivers/ddj_flx10"]
+    "macro-helpers",
+    "drivers/ddj_flx10"
+]
 exclude = [
 ]
 
