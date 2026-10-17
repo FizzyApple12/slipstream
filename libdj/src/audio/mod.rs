@@ -203,7 +203,9 @@ impl AudioSystem {
 
         let stream_config = supported_config.config();
 
-        let mut deck_dsp = DeckDSP::new(stream_config.sample_rate);
+        let reasonable_sample_rate = stream_config.sample_rate.min(96_000);
+
+        let mut deck_dsp = DeckDSP::new(reasonable_sample_rate);
         deck_dsp.reset();
 
         let audio_stream_data = RefCell::new(FullAudioPipelineStreamData {
@@ -259,7 +261,6 @@ impl AudioSystem {
 
                     let number_channels = stream_config.channels as usize;
                     let available_samples = data.len() / number_channels;
-                    let sample_rate = stream_config.sample_rate;
 
                     while let Ok((channel_index, track_data)) = loaded_track_receiver.try_recv() {
                         deck_dsp.assign_track_data(channel_index, track_data);
@@ -268,7 +269,8 @@ impl AudioSystem {
                     #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
                     let current_timecode = *last_process_timecode
                         + Duration::from_nanoseconds(
-                            ((available_samples as i128 * 1_000_000_000) / sample_rate as i128)
+                            ((available_samples as i128 * 1_000_000_000)
+                                / reasonable_sample_rate as i128)
                                 as i64,
                         );
 

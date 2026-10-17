@@ -1,4 +1,3 @@
-pub mod io;
 pub mod resampler;
 
 use std::{array, f32};
