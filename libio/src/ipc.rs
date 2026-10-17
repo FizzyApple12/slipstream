@@ -13,7 +13,10 @@ use interprocess::local_socket::{
 };
 use libdj::{AUDIO_CHANNELS, types::deck::DeckState};
 use log::{debug, info, warn};
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{
+    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
+    event::{CreateKind, RemoveKind},
+};
 use thiserror::Error;
 use tokio::{
     fs,
@@ -126,48 +129,55 @@ impl HostIPC {
 
             loop {
                 if let Some(notify_event) = event_receiver.recv().await {
-                    if let Err(err) = notify_event {
-                        warn!("Driver watcher failed: {err}");
+                    match notify_event {
+                        Ok(event)
+                            if event.kind == EventKind::Create(CreateKind::File)
+                                || event.kind == EventKind::Remove(RemoveKind::File) =>
+                        {
+                            info!("IPC folder updated, re-indexing drivers");
 
-                        loop {
-                            info!("Attempting to re-watch socket folder");
-
-                            if let Ok((mut watcher, new_event_receiver)) = async_watcher()
-                                && watcher
-                                    .watch(&cloned_ipc_folder, RecursiveMode::Recursive)
-                                    .is_ok()
+                            while let Err(err) =
+                                index_drivers(&cloned_ipc_folder, &cloned_driver_tab).await
                             {
-                                event_receiver = new_event_receiver;
+                                warn!("Failed to index drivers: {err}");
 
-                                break;
+                                tokio::time::sleep(Duration::from_secs(2)).await;
+                            }
+                        }
+                        Err(err) => {
+                            warn!("Driver watcher failed: {err}");
+
+                            loop {
+                                info!("Attempting to re-watch socket folder");
+
+                                if let Ok((mut watcher, new_event_receiver)) = async_watcher()
+                                    && watcher
+                                        .watch(&cloned_ipc_folder, RecursiveMode::Recursive)
+                                        .is_ok()
+                                {
+                                    event_receiver = new_event_receiver;
+
+                                    break;
+                                }
+
+                                warn!("Re-watch failed, re-indexing drivers for safety");
+
+                                let _ = index_drivers(&cloned_ipc_folder, &cloned_driver_tab).await;
+
+                                tokio::time::sleep(Duration::from_secs(5)).await;
                             }
 
-                            warn!("Re-watch failed, re-indexing drivers for safety");
+                            warn!("Watch reconnected, re-indexing drivers");
 
-                            let _ = index_drivers(&cloned_ipc_folder, &cloned_driver_tab).await;
+                            while let Err(err) =
+                                index_drivers(&cloned_ipc_folder, &cloned_driver_tab).await
+                            {
+                                warn!("Failed to index drivers: {err}");
 
-                            tokio::time::sleep(Duration::from_secs(5)).await;
+                                tokio::time::sleep(Duration::from_secs(2)).await;
+                            }
                         }
-
-                        warn!("Watch reconnected, re-indexing drivers");
-
-                        while let Err(err) =
-                            index_drivers(&cloned_ipc_folder, &cloned_driver_tab).await
-                        {
-                            warn!("Failed to index drivers: {err}");
-
-                            tokio::time::sleep(Duration::from_secs(2)).await;
-                        }
-                    } else {
-                        info!("IPC folder updated, re-indexing drivers");
-
-                        while let Err(err) =
-                            index_drivers(&cloned_ipc_folder, &cloned_driver_tab).await
-                        {
-                            warn!("Failed to index drivers: {err}");
-
-                            tokio::time::sleep(Duration::from_secs(2)).await;
-                        }
+                        _ => {}
                     }
                 }
             }

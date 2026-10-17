@@ -133,7 +133,7 @@ nixos-raspberrypi.lib.nixosSystem {
       };
 
       nix = {
-     	enable = false;
+     	enable = true;
       };
 
       system = {
