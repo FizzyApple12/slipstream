@@ -110,6 +110,7 @@ nixos-raspberrypi.lib.nixosSystem {
       	    "plugdev"
       	    "spi"
       	    "video"
+      	    "render"
       	  ];
        	};
       };
@@ -120,7 +121,7 @@ nixos-raspberrypi.lib.nixosSystem {
         };
 
         openssh = {
-          enable = false;
+          enable = true;
         };
       };
 
@@ -177,9 +178,10 @@ nixos-raspberrypi.lib.nixosSystem {
             description = "Run the DDJ-FLX10 driver";
             serviceConfig = {
               Type = "simple";
-              ExecStart = pkgs.writeShellScript "ddj_flx10.sh" ''
-              	${slipstream-embedded.outPath}/bin/ddj_flx10
-              '';
+              User = "dj";
+              Group = "users";
+              ReadWritePaths = "/tmp/ /tmp/slipstream_ipc";
+              ExecStart = "${slipstream-embedded.outPath}/bin/ddj_flx10 --log-path=\"/home/dj/ddj_flx10.log\"";
             };
           };
         };
@@ -210,10 +212,9 @@ nixos-raspberrypi.lib.nixosSystem {
         cage = {
           enable = true;
           extraArguments = [
-            "-d"
-            "-m extend"
+            # "-m" "extend"
           ];
-          program = "${slipstream-embedded.outPath}/bin/slipstream-embedded";
+          program = "${slipstream-embedded.outPath}/bin/slipstream-embedded --log-path=\"/home/dj/slipstream.log\"";
           user = "dj";
         };
       };

@@ -6,6 +6,7 @@ pub mod waveform_loader;
 
 use std::{array, pin::Pin, time::Duration};
 
+use clap::Parser;
 use cxx_qt_lib::{QFont, QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 use libdatabase::device_manager::DeviceManager;
 use libdj::{AUDIO_CHANNELS, engine::DJEngine};
@@ -21,6 +22,13 @@ use crate::{
 
 const LOCAL_AUTOMOUNTS: [(&str, usize); 2] = [("/djusb/usb0", 0), ("/djusb/usb1", 1)];
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(long)]
+    log_path: Option<String>,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Safety: This happens before any additional threads get spawned
     unsafe {
@@ -28,7 +36,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("QT_VIRTUALKEYBOARD_STYLE", "slipstream");
     };
 
-    setup_logger()?;
+    let args = Args::parse();
+
+    setup_logger(args.log_path)?;
 
     info!("Starting tokio runtime...");
 

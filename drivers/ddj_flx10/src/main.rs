@@ -3,6 +3,7 @@ pub mod logger;
 
 use std::{collections::BTreeMap, time::Duration};
 
+use clap::Parser;
 use libdj::types::deck::DeckState;
 use libio::{
     driver_tools::{
@@ -23,9 +24,18 @@ use crate::{
 
 const MIDI_MAPPING: &str = include_str!("../ddj-flx10.txt");
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(long)]
+    log_path: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    setup_logger()?;
+    let args = Args::parse();
+
+    setup_logger(args.log_path)?;
 
     let midi_mapping = load_midi_mapping(MIDI_MAPPING);
 

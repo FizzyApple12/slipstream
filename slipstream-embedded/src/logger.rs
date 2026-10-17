@@ -1,7 +1,7 @@
 use std::time::SystemTime;
 
 #[cfg(all(debug_assertions, not(feature = "debug_log")))]
-pub fn setup_logger() -> Result<(), fern::InitError> {
+pub fn setup_logger(log_path: Option<String>) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -14,14 +14,16 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
         })
         .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
-        .chain(fern::log_file("output.log")?)
+        .chain(fern::log_file(
+            log_path.unwrap_or("slipstream.log".to_string()),
+        )?)
         .apply()?;
 
     Ok(())
 }
 
 #[cfg(all(debug_assertions, feature = "debug_log"))]
-pub fn setup_logger() -> Result<(), fern::InitError> {
+pub fn setup_logger(log_path: Option<String>) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -34,14 +36,16 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
         })
         .level(log::LevelFilter::Debug)
         .chain(std::io::stdout())
-        .chain(fern::log_file("output.log")?)
+        .chain(fern::log_file(
+            log_path.unwrap_or("slipstream.log".to_string()),
+        )?)
         .apply()?;
 
     Ok(())
 }
 
 #[cfg(not(debug_assertions))]
-pub fn setup_logger() -> Result<(), fern::InitError> {
+pub fn setup_logger(log_path: Option<String>) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -53,7 +57,9 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
             ));
         })
         .level(log::LevelFilter::Info)
-        .chain(fern::log_file("output.log")?)
+        .chain(fern::log_file(
+            log_path.unwrap_or("slipstream.log".to_string()),
+        )?)
         .apply()?;
 
     Ok(())
