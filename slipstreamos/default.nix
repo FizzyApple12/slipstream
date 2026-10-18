@@ -54,17 +54,34 @@ nixos-raspberrypi.lib.nixosSystem {
     let
       system = "aarch64-linux";
       pkgs = import nixpkgs { inherit system; };
+      qtEnv = with pkgs.qt6; env "qt-custom-${qtbase.version}" [
+        qtdeclarative
+        qtwayland
+        qtshadertools
+        qtsvg
+        qtvirtualkeyboard
+      ];
     in {
       environment = {
         systemPackages = [
           pkgs.vim
+          pkgs.bash
           pkgs.git
+          pkgs.pkg-config
+          pkgs.cmake
+          pkgs.rustup
+          pkgs.clang
+          pkgs.llvmPackages.bintools
+          pkgs.yaml-language-server
+          pkgs.rpiboot
+          pkgs.minicom
+          pkgs.qtcreator
           pkgs.btop
           pkgs.gdb
           pkgs.heaptrack
           pkgs.valgrind
-          pkgs.rustup
           pkgs.zed-editor
+          qtEnv
         ];
       };
 
@@ -223,6 +240,20 @@ nixos-raspberrypi.lib.nixosSystem {
       services = {
         pipewire = {
           enable = true;
+
+          alsa = {
+            enable = true;
+
+            support32Bit = true;
+          };
+
+          pulse = {
+            enable = true;
+          };
+
+          jack = {
+            enable = true;
+          };
         };
 
         udev = { # ports usb 2-1, usb 5-1
