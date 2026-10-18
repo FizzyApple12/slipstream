@@ -144,6 +144,12 @@ nixos-raspberrypi.lib.nixosSystem {
         ];
       };
 
+      hardware = {
+        graphics = {
+          enable = true;
+        };
+      };
+
       users = {
       	mutableUsers = false;
 
