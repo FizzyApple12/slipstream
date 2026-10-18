@@ -2,8 +2,9 @@ use std::{cell::RefCell, rc::Rc};
 
 use criterion::Criterion;
 use libdj::{
-    MIXER_EQ_HIGH_CUTOFF, MIXER_EQ_HIGH_OCTAVES, MIXER_EQ_LOW_CUTOFF, MIXER_EQ_LOW_OCTAVES,
-    MIXER_EQ_MID_CENTER, MIXER_EQ_MID_Q, playback::DeckUpdateResults, types::deck::DeckState,
+    MIXER_EQ_HIGH_OCTAVES, MIXER_EQ_LOW_OCTAVES, MIXER_EQ_MID_CENTER, MIXER_EQ_MID_OCTAVES,
+    MIXER_ISOLATOR_LOW_MID_TRANSITION, MIXER_ISOLATOR_MID_HIGH_TRANSITION,
+    playback::DeckUpdateResults, types::deck::DeckState,
 };
 use libdsp::audio_loader::TrackAudioData;
 
@@ -77,7 +78,7 @@ pub fn test_nesting_inlining(
             master_audio,
             FilterConfiguration::<_, _, _, DummyExtractorF64, _, DummyExtractorF64>::LowShelf(
                 |data: &PipelineChannelData| {
-                    MIXER_EQ_LOW_CUTOFF / f64::from(data.output_sample_rate)
+                    MIXER_ISOLATOR_LOW_MID_TRANSITION / f64::from(data.output_sample_rate)
                 },
                 |data: &PipelineChannelData| f64::from(data.channel_state.eq.0 + 1.0),
                 |_: &PipelineChannelData| MIXER_EQ_LOW_OCTAVES,
@@ -90,14 +91,14 @@ pub fn test_nesting_inlining(
                     MIXER_EQ_MID_CENTER / f64::from(data.output_sample_rate)
                 },
                 |data: &PipelineChannelData| f64::from(data.channel_state.eq.1 + 1.0),
-                |_: &PipelineChannelData| MIXER_EQ_MID_Q,
+                |_: &PipelineChannelData| MIXER_EQ_MID_OCTAVES,
             ),
         );
         let master_audio = BiquadFilter::new(
             master_audio,
             FilterConfiguration::<_, _, _, DummyExtractorF64, _, DummyExtractorF64>::HighShelf(
                 |data: &PipelineChannelData| {
-                    MIXER_EQ_HIGH_CUTOFF / f64::from(data.output_sample_rate)
+                    MIXER_ISOLATOR_MID_HIGH_TRANSITION / f64::from(data.output_sample_rate)
                 },
                 |data: &PipelineChannelData| f64::from(data.channel_state.eq.2 + 1.0),
                 |_: &PipelineChannelData| MIXER_EQ_HIGH_OCTAVES,
@@ -149,7 +150,7 @@ pub fn test_nesting_inlining(
             touch_cue_audio,
             FilterConfiguration::<_, _, _, DummyExtractorF64, _, DummyExtractorF64>::LowShelf(
                 |data: &PipelineChannelData| {
-                    MIXER_EQ_LOW_CUTOFF / f64::from(data.output_sample_rate)
+                    MIXER_ISOLATOR_LOW_MID_TRANSITION / f64::from(data.output_sample_rate)
                 },
                 |data: &PipelineChannelData| f64::from(data.channel_state.eq.0 + 1.0),
                 |_: &PipelineChannelData| MIXER_EQ_LOW_OCTAVES,
@@ -162,14 +163,14 @@ pub fn test_nesting_inlining(
                     MIXER_EQ_MID_CENTER / f64::from(data.output_sample_rate)
                 },
                 |data: &PipelineChannelData| f64::from(data.channel_state.eq.1 + 1.0),
-                |_: &PipelineChannelData| MIXER_EQ_MID_Q,
+                |_: &PipelineChannelData| MIXER_EQ_MID_OCTAVES,
             ),
         );
         let touch_cue_audio = BiquadFilter::new(
             touch_cue_audio,
             FilterConfiguration::<_, _, _, DummyExtractorF64, _, DummyExtractorF64>::HighShelf(
                 |data: &PipelineChannelData| {
-                    MIXER_EQ_HIGH_CUTOFF / f64::from(data.output_sample_rate)
+                    MIXER_ISOLATOR_MID_HIGH_TRANSITION / f64::from(data.output_sample_rate)
                 },
                 |data: &PipelineChannelData| f64::from(data.channel_state.eq.2 + 1.0),
                 |_: &PipelineChannelData| MIXER_EQ_HIGH_OCTAVES,

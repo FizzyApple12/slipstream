@@ -7,9 +7,8 @@ rc1 todos:
 * usb-stored settings system
 * finish button bindings
 * rearchitect the audio pipeline
+	* port changes made to the v1 pipeline to the new pipelines
 	* arena, nesting, proc macro
-	* build a custom Phase Vocoder around RustFFT
-	* fill in filter coefficients based on https://vicanek.de/articles/BiquadFits.pdf
 * rearchitect the dj engine
 	* modular bus structured as virtual players and mixers
 	* segment control and communication to a flat architecture instead of a top-down architecture
@@ -35,6 +34,7 @@ rc1 todos:
 	* noise
 	* crush
 	* pitch
+* a/b updates
 * usb recording
 * switch waveform generation to use an onboard stft for consistency
 * add graceful error handling for everything

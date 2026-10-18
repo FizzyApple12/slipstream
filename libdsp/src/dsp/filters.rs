@@ -370,13 +370,13 @@ impl<const CHANNELS: usize> BiquadFilter<CHANNELS> {
                     * ((gain + 1.0)
                         + ((gain - 1.0) * omega_zero.cos())
                         + (2.0 * gain.sqrt() * alpha))) as f32;
-                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b1 = (-2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
                 self.b2 = (gain
                     * ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
                         - (2.0 * gain.sqrt() * alpha))) as f32;
                 self.a0 = ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
                     + (2.0 * gain.sqrt() * alpha)) as f32;
-                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a1 = (2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
                 self.a2 = ((gain + 1.0)
                     - ((gain - 1.0) * omega_zero.cos())
                     - (2.0 * gain.sqrt() * alpha)) as f32;
@@ -392,13 +392,13 @@ impl<const CHANNELS: usize> BiquadFilter<CHANNELS> {
                     * ((gain + 1.0)
                         + ((gain - 1.0) * omega_zero.cos())
                         + (2.0 * gain.sqrt() * alpha))) as f32;
-                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b1 = (-2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
                 self.b2 = (gain
                     * ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
                         - (2.0 * gain.sqrt() * alpha))) as f32;
                 self.a0 = ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
                     + (2.0 * gain.sqrt() * alpha)) as f32;
-                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a1 = (2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
                 self.a2 = ((gain + 1.0)
                     - ((gain - 1.0) * omega_zero.cos())
                     - (2.0 * gain.sqrt() * alpha)) as f32;
@@ -412,13 +412,13 @@ impl<const CHANNELS: usize> BiquadFilter<CHANNELS> {
                     * ((gain + 1.0)
                         + ((gain - 1.0) * omega_zero.cos())
                         + (2.0 * gain.sqrt() * alpha))) as f32;
-                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b1 = (-2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
                 self.b2 = (gain
                     * ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
                         - (2.0 * gain.sqrt() * alpha))) as f32;
                 self.a0 = ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
                     + (2.0 * gain.sqrt() * alpha)) as f32;
-                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a1 = (2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
                 self.a2 = ((gain + 1.0)
                     - ((gain - 1.0) * omega_zero.cos())
                     - (2.0 * gain.sqrt() * alpha)) as f32;
@@ -434,13 +434,13 @@ impl<const CHANNELS: usize> BiquadFilter<CHANNELS> {
                     * ((gain + 1.0)
                         + ((gain - 1.0) * omega_zero.cos())
                         + (2.0 * gain.sqrt() * alpha))) as f32;
-                self.b1 = (2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.b1 = (-2.0 * gain * ((gain - 1.0) - ((gain + 1.0) * omega_zero.cos()))) as f32;
                 self.b2 = (gain
                     * ((gain + 1.0) + ((gain - 1.0) * omega_zero.cos())
                         - (2.0 * gain.sqrt() * alpha))) as f32;
                 self.a0 = ((gain + 1.0) - ((gain - 1.0) * omega_zero.cos())
                     + (2.0 * gain.sqrt() * alpha)) as f32;
-                self.a1 = (-2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
+                self.a1 = (2.0 * ((gain - 1.0) + ((gain + 1.0) * omega_zero.cos()))) as f32;
                 self.a2 = ((gain + 1.0)
                     - ((gain - 1.0) * omega_zero.cos())
                     - (2.0 * gain.sqrt() * alpha)) as f32;

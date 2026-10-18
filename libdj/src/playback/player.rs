@@ -234,7 +234,7 @@ impl PlayerState {
                         master_beat_sync_data
                 {
                     if perform_beat_sync_run(
-                        track_time_delta,
+                        delta_time,
                         &mut self.time,
                         &mut self.tempo_percent,
                         &track_analysis.beat_grid,
@@ -280,7 +280,7 @@ impl PlayerState {
                         master_beat_sync_data
                 {
                     if perform_beat_sync_run(
-                        track_time_delta,
+                        delta_time,
                         &mut self.time,
                         &mut self.tempo_percent,
                         &track_analysis.beat_grid,
@@ -307,7 +307,7 @@ impl PlayerState {
                             master_beat_sync_data
                     {
                         if perform_beat_sync_run(
-                            track_time_delta,
+                            delta_time,
                             &mut self.slip_time,
                             &mut self.tempo_percent,
                             &track_analysis.beat_grid,
@@ -411,7 +411,7 @@ fn perform_beat_sync_run(
     master_tempo_percent: f32,
     master_beat_grid: &[Beat],
 ) -> bool {
-    *local_time += delta_time;
+    *local_time += delta_time * local_tempo_percent.max(0.0);
 
     if (-f32::EPSILON..=f32::EPSILON).contains(&master_tempo_percent) {
         return false;
@@ -459,7 +459,7 @@ fn perform_beat_sync_run(
 
     let last_master_beat_index = master_beat_grid.len() - 1;
 
-    let (master_first_beat, master_second_beat) = match (
+    let (master_first_beat, _master_second_beat) = match (
         first_closest_local_beat_index,
         second_closest_local_beat_index,
     ) {
@@ -487,28 +487,40 @@ fn perform_beat_sync_run(
         ),
     };
 
-    let precise_tempo_percent = (local_second_beat.time.nanoseconds
-        - local_first_beat.time.nanoseconds) as f64
-        / (master_second_beat.time.nanoseconds - master_first_beat.time.nanoseconds) as f64;
+    // let precise_tempo_percent = (local_second_beat.time.nanoseconds
+    //     - local_first_beat.time.nanoseconds) as f64
+    //     / (master_second_beat.time.nanoseconds -
+    // master_first_beat.time.nanoseconds) as f64;
 
-    let new_tempo_percent = precise_tempo_percent as f32;
+    // let new_tempo_percent = precise_tempo_percent as f32;
+
+    let new_tempo_percent = closest_bpm_multiple(
+        master_first_beat.bpm * master_tempo_percent,
+        local_first_beat.bpm * *local_tempo_percent,
+    ) / local_first_beat.bpm;
+
+    let precise_tempo_percent = f64::from(new_tempo_percent);
 
     let invalidate_tempo_slider = (*local_tempo_percent - new_tempo_percent).abs() >= 0.01;
 
     *local_tempo_percent = new_tempo_percent;
 
-    if (-f32::EPSILON..=f32::EPSILON).contains(&new_tempo_percent) {
-        return true;
-    }
-
     // local_time.nanoseconds = -(normalised_master_first_beat_time
     //     - (local_first_beat.time.nanoseconds as f64 * precise_tempo_percent))
     //     as i64;
 
-    local_time.nanoseconds = (local_first_beat.time.nanoseconds as f64
+    let target_time = (local_first_beat.time.nanoseconds as f64
         - ((master_first_beat.time.nanoseconds - master_time.nanoseconds) as f64
             * (precise_tempo_percent / f64::from(master_tempo_percent))))
         as i64;
+
+    let difference = local_time.nanoseconds - target_time;
+
+    if difference.abs() < 50_000_000 {
+        local_time.nanoseconds -= difference / 50;
+    } else {
+        local_time.nanoseconds = target_time;
+    }
 
     invalidate_tempo_slider
 }

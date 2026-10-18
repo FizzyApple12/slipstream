@@ -42,6 +42,8 @@
         packages = {
           slipstreamos = nixosConfigurations.slipstreamos.config.system.build.sdImage;
           slipstreamos-dev = nixosConfigurations.slipstreamos-dev.config.system.build.sdImage;
+          slipstreamos-uki = nixosConfigurations.slipstreamos.config.system.build.uki;
+          slipstreamos-dev-uki = nixosConfigurations.slipstreamos-dev.config.system.build.uki;
           slipstream-embedded = pkgs.callPackage ./package.nix {};
         };
 
