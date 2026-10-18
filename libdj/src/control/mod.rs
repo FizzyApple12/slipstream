@@ -57,12 +57,9 @@ impl DeckControlEvent {
                 mixer_crossfader_set(deck_state, position);
             }
 
-            DeckControlEvent::MixerHeadphonesMixSet { position } => {
-                log::warn!("Unbound Action: Mixer Headphones Mix Set to {position}");
-            }
-            DeckControlEvent::MixerHeadphonesGainSet { position } => {
-                log::warn!("Unbound Action: Mixer Headphones Gain Set to {position}");
-            }
+            // don't need to bind these... yet
+            DeckControlEvent::MixerHeadphonesMixSet { position: _ }
+            | DeckControlEvent::MixerHeadphonesGainSet { position: _ } => {}
 
             // mixer channels
             DeckControlEvent::MixerChannelGainSet { channel, position } => {

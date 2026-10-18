@@ -1,5 +1,4 @@
 // #![feature(stdarch_arm_feature_detection)]
-#![feature(sort_floats)]
 #![feature(trait_alias)]
 #![feature(slice_shift)]
 

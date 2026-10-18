@@ -6,7 +6,10 @@ use libdsp::audio_loader::TrackAudioData;
 use phase_vocoder_testing::{Config, Stretcher};
 use timecode::Timecode;
 
-use crate::{AUDIO_CHANNELS, audio::dsp_pipeline::track_processor::resampler::Resampler};
+use crate::{
+    AUDIO_CHANNELS, AUDIO_NEUTRAL_GAIN_DB,
+    audio::dsp_pipeline::track_processor::resampler::Resampler,
+};
 
 pub struct TrackProcessor {
     target_sample_rate: u32,
@@ -69,6 +72,7 @@ impl TrackProcessor {
         }
 
         let samples_retrieved = track_data.read_samples(
+            AUDIO_NEUTRAL_GAIN_DB,
             start_time,
             end_time,
             wrap_times,

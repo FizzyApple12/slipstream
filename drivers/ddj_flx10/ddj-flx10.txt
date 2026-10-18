@@ -58,8 +58,8 @@
 0xB62D->a(lsb,0.0,2.0):MixerHeadphonesGainSet
 
 # mixer channels
-0xBn04->a(msb,0.0,2.0):MixerChannelGainSet
-0xBn24->a(lsb,0.0,2.0):MixerChannelGainSet
+0xBn04->a(msb,0.0,2.81):MixerChannelGainSet
+0xBn24->a(lsb,0.0,2.81):MixerChannelGainSet
 
 0xBn07->a(msb,-1.0,1.0):MixerChannelEqHighSet
 0xBn27->a(lsb,-1.0,1.0):MixerChannelEqHighSet

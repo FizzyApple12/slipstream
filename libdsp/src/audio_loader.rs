@@ -32,7 +32,7 @@ pub enum TrackLoadError {
 #[derive(Clone)]
 pub struct TrackAudioData {
     pub samples: Vec<Vec<f32>>,
-    pub base_gain: f32,
+    pub rms_gain: f32,
 
     pub first_sample_time: f32,
     pub sample_rate: u32,
@@ -82,7 +82,7 @@ impl TrackAudioData {
 
         let mut new_track_audio_data = TrackAudioData {
             samples: Vec::new(),
-            base_gain: 0.0,
+            rms_gain: 0.0,
 
             // todo: track.codec_params.start_ts as f64,
             first_sample_time: 0.0,
@@ -320,17 +320,13 @@ impl TrackAudioData {
             }
         }
 
-        let mut raw_amplitudes: Vec<f32> = new_track_audio_data
+        let rms_amplitude: f32 = new_track_audio_data
             .samples
             .iter()
             .map(|samples| rms(samples))
-            .collect();
+            .fold(0.0, f32::max);
 
-        raw_amplitudes.sort_floats();
-
-        let db_gain = amplitude_to_db(*raw_amplitudes.last().ok_or(TrackLoadError::NoValidGains)?);
-
-        new_track_audio_data.base_gain = db_gain;
+        new_track_audio_data.rms_gain = amplitude_to_db(rms_amplitude);
 
         Ok(new_track_audio_data)
     }
@@ -344,12 +340,14 @@ impl TrackAudioData {
     )]
     pub fn read_samples<const AUDIO_CHANNELS: usize>(
         &self,
+        neutral_gain: f32,
         start: Timecode,
         end: Timecode,
         wrap: Option<(Timecode, Timecode, usize)>,
         output_buffers: &mut [Vec<f32>; AUDIO_CHANNELS],
     ) -> usize {
         let total_source_buffers = self.samples.len();
+        let neutral_gain = neutral_gain - self.rms_gain;
 
         match (start, end, wrap) {
             (start, end, None) => {
@@ -378,7 +376,7 @@ impl TrackAudioData {
                                 if source_index >= 0 && source_index < max_sample_index {
                                     self.samples[buffer_index % total_source_buffers]
                                         [source_index as usize]
-                                        * db_to_amplitude(self.base_gain)
+                                        * db_to_amplitude(neutral_gain)
                                 } else {
                                     0.0
                                 };
@@ -394,7 +392,7 @@ impl TrackAudioData {
                                 if source_index >= 0 && source_index < max_sample_index {
                                     self.samples[buffer_index % total_source_buffers]
                                         [source_index as usize]
-                                        * db_to_amplitude(self.base_gain)
+                                        * db_to_amplitude(neutral_gain)
                                 } else {
                                     0.0
                                 };
@@ -450,7 +448,7 @@ impl TrackAudioData {
                                 if source_index >= 0 && source_index < max_sample_index {
                                     self.samples[buffer_index % total_source_buffers]
                                         [source_index as usize]
-                                        * db_to_amplitude(self.base_gain)
+                                        * db_to_amplitude(neutral_gain)
                                 } else {
                                     0.0
                                 };
@@ -466,7 +464,7 @@ impl TrackAudioData {
                                 if source_index >= 0 && source_index < max_sample_index {
                                     self.samples[buffer_index % total_source_buffers]
                                         [source_index as usize]
-                                        * db_to_amplitude(self.base_gain)
+                                        * db_to_amplitude(neutral_gain)
                                 } else {
                                     0.0
                                 };
@@ -486,7 +484,7 @@ impl TrackAudioData {
                                     if source_index >= 0 && source_index < max_sample_index {
                                         self.samples[buffer_index % total_source_buffers]
                                             [source_index as usize]
-                                            * db_to_amplitude(self.base_gain)
+                                            * db_to_amplitude(neutral_gain)
                                     } else {
                                         0.0
                                     };
@@ -505,7 +503,7 @@ impl TrackAudioData {
                                     if source_index >= 0 && source_index < max_sample_index {
                                         self.samples[buffer_index % total_source_buffers]
                                             [source_index as usize]
-                                            * db_to_amplitude(self.base_gain)
+                                            * db_to_amplitude(neutral_gain)
                                     } else {
                                         0.0
                                     };
@@ -525,7 +523,7 @@ impl TrackAudioData {
                                 if source_index >= 0 && source_index < max_sample_index {
                                     self.samples[buffer_index % total_source_buffers]
                                         [source_index as usize]
-                                        * db_to_amplitude(self.base_gain)
+                                        * db_to_amplitude(neutral_gain)
                                 } else {
                                     0.0
                                 };
@@ -542,7 +540,7 @@ impl TrackAudioData {
                                 if source_index >= 0 && source_index < max_sample_index {
                                     self.samples[buffer_index % total_source_buffers]
                                         [source_index as usize]
-                                        * db_to_amplitude(self.base_gain)
+                                        * db_to_amplitude(neutral_gain)
                                 } else {
                                     0.0
                                 };

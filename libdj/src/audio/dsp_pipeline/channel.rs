@@ -25,6 +25,7 @@ pub struct ChannelDSP {
 
     pub amplitude_history: [[f32; MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH]; AUDIO_CHANNELS],
 
+    gain: f32,
     eq_low_coefficient: f32,
     eq_mid_coefficient: f32,
     eq_high_coefficient: f32,
@@ -56,6 +57,7 @@ impl ChannelDSP {
 
             amplitude_history: [[0.0; MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH]; AUDIO_CHANNELS],
 
+            gain: 0.0,
             eq_low_coefficient: 0.0,
             eq_mid_coefficient: 0.0,
             eq_high_coefficient: 0.0,
@@ -114,6 +116,7 @@ impl ChannelDSP {
             number_samples,
         );
 
+        self.gain = channel_state.gain;
         self.eq_low_coefficient = channel_state.eq_low;
         self.eq_mid_coefficient = channel_state.eq_mid;
         self.eq_high_coefficient = channel_state.eq_high;
@@ -131,7 +134,7 @@ impl ChannelDSP {
             .zip(master_left[0..number_samples].iter_mut())
             .zip(master_right[0..number_samples].iter_mut())
         {
-            let root_sample = [*local_left, *local_right];
+            let root_sample = [*local_left * self.gain, *local_right * self.gain];
 
             let low_filtered = self.master_eq_filters.0.process(root_sample);
             let mid_filtered = self.master_eq_filters.1.process(low_filtered);
@@ -176,7 +179,7 @@ impl ChannelDSP {
                 .zip(local_master_left[0..number_samples].iter_mut())
                 .zip(local_master_right[0..number_samples].iter_mut())
         {
-            let root_sample = [*local_left, *local_right];
+            let root_sample = [*local_left * self.gain, *local_right * self.gain];
 
             let low_filtered = self.touch_cue_eq_filters.0.process(root_sample);
             let mid_filtered = self.touch_cue_eq_filters.1.process(low_filtered);
