@@ -28,13 +28,20 @@
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
       in rec {
-        nixosConfigurations.djdeck = import ./slipstreamos {
+        nixosConfigurations.slipstreamos = import ./slipstreamos {
           inputs = inputs;
           nixos-raspberrypi = nixos-raspberrypi;
+          development = false;
+        };
+        nixosConfigurations.slipstreamos-dev = import ./slipstreamos {
+          inputs = inputs;
+          nixos-raspberrypi = nixos-raspberrypi;
+          development = true;
         };
 
         packages = {
-          slipstreamos = nixosConfigurations.djdeck.config.system.build.sdImage;
+          slipstreamos = nixosConfigurations.slipstreamos.config.system.build.sdImage;
+          slipstreamos-dev = nixosConfigurations.slipstreamos-dev.config.system.build.sdImage;
           slipstream-embedded = pkgs.callPackage ./package.nix {};
         };
 

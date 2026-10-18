@@ -1,6 +1,7 @@
 {
   inputs,
   nixos-raspberrypi,
+  development,
   ...
 }:
 nixos-raspberrypi.lib.nixosSystem {
@@ -17,40 +18,72 @@ nixos-raspberrypi.lib.nixosSystem {
       ];
     })
     ({lib, ... }:
-    let
-      inherit (lib) mkDefault;
-    in
     {
       documentation = {
-        enable = mkDefault false;
-        doc.enable = mkDefault false;
-        info.enable = mkDefault false;
-        man.enable = mkDefault false;
-        nixos.enable = mkDefault false;
+        enable = lib.mkDefault false;
+        doc.enable = lib.mkDefault false;
+        info.enable = lib.mkDefault false;
+        man.enable = lib.mkDefault false;
+        nixos.enable = lib.mkDefault false;
       };
 
       environment = {
-        defaultPackages = mkDefault [ ];
-        stub-ld.enable = mkDefault false;
+        defaultPackages = lib.mkDefault [ ];
+        stub-ld.enable = lib.mkDefault false;
       };
 
       programs = {
-        command-not-found.enable = mkDefault false;
-        fish.generateCompletions = mkDefault false;
+        command-not-found.enable = lib.mkDefault false;
+        fish.generateCompletions = lib.mkDefault false;
       };
 
       services = {
-        logrotate.enable = mkDefault false;
-        udisks2.enable = mkDefault false;
+        logrotate.enable = lib.mkDefault false;
+        udisks2.enable = lib.mkDefault false;
       };
 
       xdg = {
-        autostart.enable = mkDefault false;
-        icons.enable = mkDefault false;
-        mime.enable = mkDefault false;
-        sounds.enable = mkDefault false;
+        autostart.enable = lib.mkDefault false;
+        icons.enable = lib.mkDefault false;
+        mime.enable = lib.mkDefault false;
+        sounds.enable = lib.mkDefault false;
       };
     })
+    (if development then
+    ({lib, nixpkgs, ...}:
+    let
+      system = "aarch64-linux";
+      pkgs = import nixpkgs { inherit system; };
+    in {
+      environment = {
+        systemPackages = [
+          pkgs.vim
+          pkgs.git
+          pkgs.btop
+          pkgs.gdb
+          pkgs.heaptrack
+          pkgs.valgrind
+          pkgs.rustup
+          pkgs.zed-editor
+        ];
+      };
+
+      services = {
+        openssh = {
+          enable = lib.mkForce true;
+        };
+      };
+
+      nix = {
+        enable = lib.mkForce true;
+
+        settings = {
+          experimental-features = ["flakes" "nix-command"];
+        };
+      };
+    })
+    else
+    ({...}:{}))
     ({lib, ...}: {
       time = {
         timeZone = "UTC";
@@ -121,7 +154,7 @@ nixos-raspberrypi.lib.nixosSystem {
         };
 
         openssh = {
-          enable = true;
+          enable = false;
         };
       };
 
@@ -133,7 +166,7 @@ nixos-raspberrypi.lib.nixosSystem {
       };
 
       nix = {
-     	enable = true;
+     	enable = false;
       };
 
       system = {
