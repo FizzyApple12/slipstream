@@ -26,10 +26,10 @@ pub fn midi_split_pair_to_f32_range(msb: u8, lsb: u8, min: f32, max: f32) -> f32
 pub fn midi_rpm_to_f32(jog: u8) -> f32 {
     if jog >= 0x41 {
         // +
-        (6.0 * jog as f32) - 390.0
+        (9.5 * jog as f32) - 617.5
     } else if jog <= 0x3F {
         // -
-        (6.0 * jog as f32) - 378.0
+        (9.5 * jog as f32) - 598.5
     } else {
         0.0
     }

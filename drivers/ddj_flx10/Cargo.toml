@@ -8,16 +8,20 @@ log.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
+rkyv.workspace = true
+base64.workspace = true
 fern = { version = "0.7", features = [ "colored" ] }
 humantime = "2.4.0"
 libio = { path = "../../libio" }
 libdj = { path = "../../libdj" }
 timecode = { path = "../../timecode" }
 interprocess = { version = "2.4.0", features = ["tokio"] }
-rkyv.workspace = true
-base64.workspace = true
-midir = { version = "0.11.0", features = [ ] }
+# rusb = "0.9.4"
+nusb = { version = "0.2.8", features = ["tokio"] }
+# midir = { version = "0.11.0", features = [ ] }
 clap = { version = "4.6.7", features = ["derive"] }
+serde_json = "1.0.154"
+bytes = "1.12.1"
 
 [features]
 debug_log = []

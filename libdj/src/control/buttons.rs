@@ -62,19 +62,23 @@ pub fn player_slip_press(deck_state: &mut DeckState, channel: usize) {
     }
 }
 
+pub fn player_gate_cue_press(deck_state: &mut DeckState, channel: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        channel.player.gate_cue = !channel.player.gate_cue;
+    }
+}
+
 pub fn player_play_press(deck_state: &mut DeckState, channel: usize) {
     if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
-        let play_direction = &mut channel.player.play_state;
-
-        match play_direction {
+        match channel.player.play_state {
             PlayState::Cue | PlayState::Stop => {
                 if channel.player.slip_playing {
                     channel.player.time = channel.player.slip_time;
                 }
 
-                *play_direction = PlayState::Play;
+                channel.player.play_state = PlayState::Play;
             }
-            PlayState::Play => *play_direction = PlayState::Stop,
+            PlayState::Play => channel.player.play_state = PlayState::Stop,
         }
     }
 }
@@ -165,36 +169,13 @@ pub fn player_cue_press(deck_state: &mut DeckState, channel: usize, alt: bool) {
 }
 
 pub fn player_cue_release(deck_state: &mut DeckState, channel: usize) {
-    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
-        let play_direction = &mut channel.player.play_state;
-        let cue_time = &mut channel.player.cue_time;
-
-        if *play_direction == PlayState::Cue {
-            *play_direction = PlayState::Stop;
-
-            if let Some(position) = cue_time {
-                channel.player.time = *position;
-            }
-        }
-    }
-}
-
-#[allow(clippy::cast_possible_truncation)]
-pub fn player_beat_jump_release(
-    deck_state: &mut DeckState,
-    channel: usize,
-    direction: bool,
-    long: bool,
-) {
     if let Some(channel) = deck_state.mixer_channels.get_mut(channel)
-        && let Some(bpm) = channel.player.get_current_source_bpm()
+        && channel.player.play_state == PlayState::Cue
     {
-        let distance = (60_000_000_000.0 / bpm).floor() as i64 * if long { 16 } else { 4 };
+        channel.player.play_state = PlayState::Stop;
 
-        if direction {
-            channel.player.time += Duration::from_nanoseconds(distance);
-        } else {
-            channel.player.time -= Duration::from_nanoseconds(distance);
+        if let Some(position) = channel.player.cue_time {
+            channel.player.time = position;
         }
     }
 }
@@ -279,6 +260,7 @@ pub fn player_beat_loop_in_press(deck_state: &mut DeckState, channel: usize) {
                 let new_end = loop_start + ((loop_end - loop_start) / 2);
 
                 channel.player.beat_loop_end = Some(new_end);
+                channel.player.last_beat_loop = Some((loop_start, new_end));
             }
         } else {
             let loop_start_time = if channel.player.quanitze {
@@ -297,6 +279,12 @@ pub fn player_beat_loop_in_press(deck_state: &mut DeckState, channel: usize) {
             }
 
             channel.player.beat_loop_start = Some(loop_start_time);
+
+            if let Some(loop_start) = channel.player.beat_loop_start
+                && let Some(loop_end) = channel.player.beat_loop_end
+            {
+                channel.player.last_beat_loop = Some((loop_start, loop_end));
+            }
         }
     }
 }
@@ -319,6 +307,7 @@ pub fn player_beat_loop_out_press(deck_state: &mut DeckState, channel: usize) {
             let new_end = loop_start + ((loop_end - loop_start) * 2);
 
             channel.player.beat_loop_end = Some(new_end);
+            channel.player.last_beat_loop = Some((loop_start, new_end));
         } else {
             let loop_end_time = if channel.player.quanitze {
                 channel
@@ -336,6 +325,12 @@ pub fn player_beat_loop_out_press(deck_state: &mut DeckState, channel: usize) {
             }
 
             channel.player.beat_loop_end = Some(loop_end_time);
+
+            if let Some(loop_start) = channel.player.beat_loop_start
+                && let Some(loop_end) = channel.player.beat_loop_end
+            {
+                channel.player.last_beat_loop = Some((loop_start, loop_end));
+            }
         }
     }
 }
@@ -366,19 +361,119 @@ pub fn player_re_loop_press(deck_state: &mut DeckState, channel: usize) {
         channel.player.beat_loop_start = Some(last_loop_start);
         channel.player.beat_loop_end = Some(last_loop_end);
 
-        channel.player.time = last_loop_start;
+        if channel.player.time.nanoseconds < last_loop_start.nanoseconds
+            || channel.player.time.nanoseconds > last_loop_end.nanoseconds
+        {
+            channel.player.time = last_loop_start;
+        }
     }
 }
 
 #[allow(clippy::cast_possible_truncation)]
-pub fn player_instant_loop_press(deck_state: &mut DeckState, channel: usize) {
+pub fn player_hot_cue_press(deck_state: &mut DeckState, channel: usize, number: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel)
+        && let Some(analysis) = &channel.player.current_track_analysis
+        && let Some(cue) = analysis
+            .hot_cues
+            .iter()
+            .find(|cue| cue.number == number as u32)
+    {
+        channel.player.cue_time = Some(cue.time);
+        channel.player.time = cue.time;
+
+        if channel.player.gate_cue {
+            channel.player.play_state = PlayState::Cue;
+        } else {
+            channel.player.play_state = PlayState::Play;
+        }
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn player_hot_cue_release(deck_state: &mut DeckState, channel: usize, number: usize) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel)
+        && channel.player.gate_cue
+        && channel.player.play_state == PlayState::Cue
+        && let Some(analysis) = &channel.player.current_track_analysis
+        && let Some(cue) = analysis
+            .hot_cues
+            .iter()
+            .find(|cue| cue.number == number as u32)
+        && let Some(cue_time) = channel.player.cue_time
+        && cue.time == cue_time
+    {
+        channel.player.play_state = PlayState::Stop;
+        channel.player.time = cue.time;
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn player_beat_jump_press(deck_state: &mut DeckState, channel: usize, distance: f32) {
     if let Some(channel) = deck_state.mixer_channels.get_mut(channel)
         && let Some(bpm) = channel.player.get_current_source_bpm()
     {
-        let length = (60_000_000_000.0 / bpm).floor() as i64 * 4;
+        if channel.player.beat_sync == BeatSyncMode::BeatSync {
+            let fractional_distance = distance.abs().fract();
 
-        channel.player.beat_loop_start = Some(channel.player.time);
-        channel.player.beat_loop_end =
-            Some(channel.player.time + Duration::from_nanoseconds(length));
+            if fractional_distance > f32::EPSILON && fractional_distance < (1.0 - f32::EPSILON) {
+                channel.player.beat_sync = BeatSyncMode::BPMSync;
+            }
+        }
+
+        let distance = ((60_000_000_000.0 / bpm) * distance).floor() as i64;
+
+        channel.player.time += Duration::from_nanoseconds(distance);
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn player_instant_loop_press(deck_state: &mut DeckState, channel: usize, length: f32) {
+    if length.abs() < f32::EPSILON {
+        return;
+    }
+
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel)
+        && let Some(bpm) = channel.player.get_current_source_bpm()
+    {
+        let length = Duration::from_nanoseconds(((60_000_000_000.0 / bpm) * length).floor() as i64);
+
+        if let Some(loop_start) = channel.player.beat_loop_start
+            && channel.player.beat_loop_end.is_some()
+        {
+            let new_end = loop_start + length;
+
+            channel.player.beat_loop_end = Some(new_end);
+
+            channel.player.last_beat_loop = Some((loop_start, new_end));
+        } else {
+            let loop_start_time = if channel.player.quanitze {
+                channel
+                    .player
+                    .get_closest_beat()
+                    .map_or(channel.player.time, |beat| beat.time)
+            } else {
+                channel.player.time
+            };
+
+            if let Some(loop_end) = channel.player.beat_loop_end
+                && loop_start_time >= loop_end
+            {
+                channel.player.beat_loop_end = None;
+            }
+
+            channel.player.beat_loop_start = Some(loop_start_time);
+            channel.player.beat_loop_end = Some(loop_start_time + length);
+
+            channel.player.last_beat_loop = Some((loop_start_time, loop_start_time + length));
+        }
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn player_key_shift_press(deck_state: &mut DeckState, channel: usize, shift: f32) {
+    if let Some(channel) = deck_state.mixer_channels.get_mut(channel) {
+        channel.player.keyshift = shift;
+
+        channel.player.key_sync = false;
     }
 }

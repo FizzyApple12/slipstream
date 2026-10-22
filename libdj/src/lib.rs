@@ -33,7 +33,7 @@ const MIN_LOOP_SIZE_NANOSECONDS: i64 = 1_000_000;
 pub const MIXER_CHANNELS: usize = 4;
 pub const AUDIO_CHANNELS: usize = 2;
 
-pub const AUDIO_NEUTRAL_GAIN_DB: f32 = -10.0;
+pub const AUDIO_NEUTRAL_GAIN_DB: f32 = -12.0;
 
 pub const MIXER_MIN_FREQUENCY: f32 = 0.0;
 pub const MIXER_MAX_FREQUENCY: f32 = 22000.0;

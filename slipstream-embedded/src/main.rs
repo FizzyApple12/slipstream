@@ -85,6 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 controller_event = host_ipc.receive_event() => {
                     match map_controller_event(controller_event) {
+                        MappedEvent::Invalid => {}
                         MappedEvent::UIControlEvent(ui_control_event) => {
                             let _ = ui_control_event_sender.send(ui_control_event);
                         },

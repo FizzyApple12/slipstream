@@ -313,6 +313,7 @@ mod qobject {
         #[qproperty(f32, waveform_length_seconds)]
         #[qproperty(*mut GpuTextureSource, preview_waveform_texture_source)]
         #[qproperty(QList_QVariant, beat_grid)]
+        #[qproperty(QList_QVariant, hot_cues)]
         #[qproperty(bool, track_loaded)]
         #[qproperty(QString, track_name)]
         #[qproperty(QString, track_artist)]
@@ -386,7 +387,9 @@ mod qobject {
         #[qproperty(BrowserPage, browser_page)]
         #[qproperty(BrowserPage, last_browser_page)]
         #[qproperty(*mut SourceListModel, source_index)]
+        #[qproperty(i32, highlighted_source_index)]
         #[qproperty(*mut BrowserListModel, browser_index)]
+        #[qproperty(i32, highlighted_browser_index)]
         #[qproperty(bool, device_selected)]
         #[qproperty(i32, active_device)]
         #[qproperty(QString, search)]
@@ -398,6 +401,8 @@ mod qobject {
         #[qproperty(QString, active_key_name)]
         #[qproperty(bool, playlist_tree_can_pop)]
         #[qproperty(QString, playlist_tree_name)]
+        #[qproperty(bool, load_popup_showing)]
+        #[qproperty(i32, load_popup_node_id)]
         #[qproperty(*mut EngineBridgeDeck, deck_state)]
         #[qproperty(f64, waveform_pixels_per_second)]
         #[qproperty(bool, mixer_channel_fx_proximity)]
@@ -526,6 +531,7 @@ pub struct EngineBridgePlayerRust {
     pub preview_waveform_texture_source: *mut GpuTextureSource,
 
     pub beat_grid: QList<QVariant>,
+    pub hot_cues: QList<QVariant>,
 
     pub track_loaded: bool,
     pub track_name: QString,
@@ -589,6 +595,7 @@ impl Default for EngineBridgePlayerRust {
             preview_waveform_texture_source: new_gpu_texture_source(),
 
             beat_grid: QList::default(),
+            hot_cues: QList::default(),
 
             track_loaded: false,
             track_name: QString::from(""),
@@ -735,8 +742,10 @@ pub struct EngineBridgeRust {
     pub last_browser_page: BrowserPage,
 
     pub source_index: *mut SourceListModel,
+    pub highlighted_source_index: i32,
 
     pub browser_index: *mut BrowserListModel,
+    pub highlighted_browser_index: i32,
 
     pub device_selected: bool,
     pub active_device: i32,
@@ -758,6 +767,9 @@ pub struct EngineBridgeRust {
     pub playlist_tree: Vec<u32>,
     pub playlist_tree_can_pop: bool,
     pub playlist_tree_name: QString,
+
+    pub load_popup_showing: bool,
+    pub load_popup_node_id: i32,
 
     pub deck_state: *mut EngineBridgeDeck,
 
@@ -789,8 +801,10 @@ impl cxx_qt::Constructor<()> for qobject::EngineBridge {
             last_browser_page: BrowserPage::Track,
 
             source_index: std::ptr::null_mut(),
+            highlighted_source_index: 0,
 
             browser_index: std::ptr::null_mut(),
+            highlighted_browser_index: 0,
 
             device_selected: false,
             active_device: 0,
@@ -812,6 +826,9 @@ impl cxx_qt::Constructor<()> for qobject::EngineBridge {
             playlist_tree: Vec::new(),
             playlist_tree_can_pop: false,
             playlist_tree_name: QString::from("/"),
+
+            load_popup_showing: false,
+            load_popup_node_id: 0,
 
             deck_state: new_engine_bridge_deck(),
 
@@ -970,6 +987,18 @@ impl qobject::EngineBridge {
             self.as_mut().update_from_deck_state(&new_deck_state);
         }
 
+        let mut should_select_device = None;
+        let mut should_select_track = None;
+        let mut should_push_playlist = None;
+        let mut should_select_artist = None;
+        let mut should_select_album = None;
+        let mut should_select_key = None;
+
+        let mut should_deselect_artist = false;
+        let mut should_deselect_album = false;
+        let mut should_deselect_key = false;
+        let mut should_pop_playlist = false;
+
         while let Ok(event) = event_receiver.try_recv() {
             match event {
                 UIControlEvent::USBEjectPress { slot } => {
@@ -979,28 +1008,130 @@ impl qobject::EngineBridge {
                     warn!("not implemented: stop device eject for {slot}");
                 }
                 UIControlEvent::BrowserEncoderAdjust { delta } => {
-                    let new_pixels_per_second = if delta.is_sign_positive() {
-                        self.waveform_pixels_per_second * 2.0 * f64::from(delta)
+                    if self.browser_page == BrowserPage::Closed && !self.source_open {
+                        let new_pixels_per_second = if delta.is_sign_positive() {
+                            self.waveform_pixels_per_second * 2.0 * f64::from(delta)
+                        } else {
+                            self.waveform_pixels_per_second / (2.0 * f64::from(delta.abs()))
+                        };
+
+                        self.as_mut()
+                            .set_waveform_pixels_per_second(new_pixels_per_second);
+                    } else if self.source_open {
+                        // Safety: Probably not
+                        let mut source_index_pin = unsafe {
+                            let Some(source_index) = self.source_index.as_mut() else {
+                                return;
+                            };
+
+                            Pin::new_unchecked(&mut *source_index)
+                        };
+
+                        let sources_length = source_index_pin.as_mut().rust_mut().items.len();
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+                        let new_index = (self.highlighted_source_index + delta.round() as i32)
+                            .rem_euclid(sources_length as i32);
+
+                        self.as_mut().set_highlighted_source_index(new_index);
                     } else {
-                        self.waveform_pixels_per_second / (2.0 * f64::from(delta.abs()))
-                    };
+                        // Safety: Probably not
+                        let mut browser_index_pin = unsafe {
+                            let Some(browser_index) = self.browser_index.as_mut() else {
+                                return;
+                            };
 
-                    self.as_mut()
-                        .set_waveform_pixels_per_second(new_pixels_per_second);
+                            Pin::new_unchecked(&mut *browser_index)
+                        };
+
+                        let browser_length = browser_index_pin.as_mut().rust_mut().items.len();
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+                        let new_index = (self.highlighted_browser_index + delta.round() as i32)
+                            .rem_euclid(browser_length as i32);
+
+                        self.as_mut().set_highlighted_browser_index(new_index);
+                    }
                 }
-                UIControlEvent::BrowserEncoderPress => {}
-                UIControlEvent::BrowserBackPress => {
-                    if self.source_open {
-                        self.as_mut().set_source_open(false);
+                UIControlEvent::BrowserEncoderPress => {
+                    if self.browser_page == BrowserPage::Closed && !self.source_open {
+                    } else if self.source_open {
+                        // Safety: Probably not
+                        let source_index_pin = unsafe {
+                            let Some(source_index) = self.source_index.as_ref() else {
+                                return;
+                            };
 
-                        if !self.device_selected {
-                            self.as_mut().set_browser_page(BrowserPage::Closed);
+                            Pin::new_unchecked(source_index)
+                        };
+
+                        #[allow(clippy::cast_sign_loss)]
+                        if let Some(source) = source_index_pin
+                            .rust()
+                            .items
+                            .get(self.highlighted_source_index as usize)
+                        {
+                            should_select_device = Some(source.device_number);
                         }
                     } else {
-                        self.as_mut().set_browser_page(BrowserPage::Closed);
-                    }
+                        // Safety: Probably not
+                        let browser_index_pin = unsafe {
+                            let Some(browser_index) = self.browser_index.as_ref() else {
+                                return;
+                            };
 
-                    self.as_mut().rebuild_browse_index(device_manager);
+                            Pin::new_unchecked(browser_index)
+                        };
+
+                        #[allow(clippy::cast_sign_loss)]
+                        if let Some(entry) = browser_index_pin
+                            .rust()
+                            .items
+                            .get(self.highlighted_browser_index as usize)
+                        {
+                            match entry.entry_type {
+                                BrowserEntryType::Track => {
+                                    should_select_track = Some(entry.node_id);
+                                }
+                                BrowserEntryType::Playlist => {
+                                    should_push_playlist = Some(entry.node_id);
+                                }
+                                BrowserEntryType::Artist => {
+                                    should_select_artist = Some(entry.node_id);
+                                }
+                                BrowserEntryType::Album => {
+                                    should_select_album = Some(entry.node_id);
+                                }
+                                BrowserEntryType::Key => {
+                                    should_select_key = Some(entry.node_id);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                UIControlEvent::BrowserBackPress => {
+                    if self.source_open {
+                    } else if self.load_popup_showing {
+                        self.as_mut().set_load_popup_showing(false);
+                    } else {
+                        match self.browser_page {
+                            BrowserPage::Search => {
+                                self.as_mut().set_search(QString::from(""));
+                            }
+                            BrowserPage::Artist if self.artist_selected => {
+                                should_deselect_artist = true;
+                            }
+                            BrowserPage::Album if self.album_selected => {
+                                should_deselect_album = true;
+                            }
+                            BrowserPage::Key if self.key_selected => {
+                                should_deselect_key = true;
+                            }
+                            BrowserPage::Playlist if self.playlist_tree_can_pop => {
+                                should_pop_playlist = true;
+                            }
+                            _ => {}
+                        }
+                    }
                 }
                 UIControlEvent::BrowserSourcePress => {
                     if self.source_open {
@@ -1042,6 +1173,42 @@ impl qobject::EngineBridge {
                     self.as_mut().set_mixer_master_fx_proximity(false);
                 }
             }
+        }
+
+        drop(device_manager_lock);
+
+        if let Some(device_number) = should_select_device {
+            self.as_mut().select_device(device_number);
+        }
+
+        if let Some(node_id) = should_select_track {
+            self.as_mut().set_load_popup_node_id(node_id);
+            self.as_mut().set_load_popup_showing(true);
+        }
+        if let Some(node_id) = should_push_playlist {
+            self.as_mut().push_playlist_node(node_id);
+        }
+        if let Some(node_id) = should_select_artist {
+            self.as_mut().select_artist(node_id);
+        }
+        if let Some(node_id) = should_select_album {
+            self.as_mut().select_album(node_id);
+        }
+        if let Some(node_id) = should_select_key {
+            self.as_mut().select_key(node_id);
+        }
+
+        if should_deselect_artist {
+            self.as_mut().deselect_artist();
+        }
+        if should_deselect_album {
+            self.as_mut().deselect_album();
+        }
+        if should_deselect_key {
+            self.as_mut().deselect_key();
+        }
+        if should_pop_playlist {
+            self.as_mut().pop_playlist_node();
         }
     }
 
@@ -1098,6 +1265,9 @@ impl qobject::EngineBridge {
         } else if self.as_mut().browser_page != page {
             self.as_mut().set_last_browser_page(page);
             self.as_mut().set_browser_page(page);
+        } else if self.as_mut().browser_page == page {
+            self.as_mut().set_last_browser_page(page);
+            self.as_mut().set_browser_page(BrowserPage::Closed);
         }
 
         self.as_mut().rebuild_browse_index(device_manager);
@@ -1582,6 +1752,54 @@ impl qobject::EngineBridge {
                                         m.insert(
                                             QString::from("time"),
                                             QVariant::from(&beat.time.nanoseconds),
+                                        );
+
+                                        QVariant::from(&m)
+                                    })
+                                    .collect(),
+                            );
+
+                            player_pin.as_mut().set_hot_cues(
+                                track_analysis
+                                    .hot_cues
+                                    .iter()
+                                    .map(|hot_cue| {
+                                        let mut m = QMap::<QMapPair_QString_QVariant>::default();
+
+                                        m.insert(
+                                            QString::from("number"),
+                                            QVariant::from(&hot_cue.number),
+                                        );
+                                        m.insert(
+                                            QString::from("color"),
+                                            QVariant::from(&QString::from(format!(
+                                                "#{:02x}{:02x}{:02x}",
+                                                hot_cue.color.0, hot_cue.color.1, hot_cue.color.2
+                                            ))),
+                                        );
+                                        m.insert(
+                                            QString::from("time"),
+                                            QVariant::from(&hot_cue.time.nanoseconds),
+                                        );
+                                        m.insert(
+                                            QString::from("has_loop"),
+                                            QVariant::from(&match hot_cue.cue_type {
+                                                libdj::types::analysis::CueType::Point => false,
+                                                libdj::types::analysis::CueType::Loop(_) => true,
+                                            }),
+                                        );
+                                        m.insert(
+                                            QString::from("loop_end"),
+                                            QVariant::from(&match hot_cue.cue_type {
+                                                libdj::types::analysis::CueType::Point => 0,
+                                                libdj::types::analysis::CueType::Loop(timecode) => {
+                                                    timecode.nanoseconds
+                                                }
+                                            }),
+                                        );
+                                        m.insert(
+                                            QString::from("comment"),
+                                            QVariant::from(&QString::from(hot_cue.comment.clone())),
                                         );
 
                                         QVariant::from(&m)

@@ -13,10 +13,7 @@ use interprocess::local_socket::{
 };
 use libdj::{AUDIO_CHANNELS, types::deck::DeckState};
 use log::{debug, info, warn};
-use notify::{
-    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
-    event::{CreateKind, RemoveKind},
-};
+use notify::{self, Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use thiserror::Error;
 use tokio::{
     fs,
@@ -130,10 +127,7 @@ impl HostIPC {
             loop {
                 if let Some(notify_event) = event_receiver.recv().await {
                     match notify_event {
-                        Ok(event)
-                            if event.kind == EventKind::Create(CreateKind::File)
-                                || event.kind == EventKind::Remove(RemoveKind::File) =>
-                        {
+                        Ok(event) if !event.kind.is_access() && !event.kind.is_other() => {
                             info!("IPC folder updated, re-indexing drivers");
 
                             while let Err(err) =

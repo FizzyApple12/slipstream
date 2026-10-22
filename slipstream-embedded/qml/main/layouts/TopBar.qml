@@ -28,6 +28,8 @@ Rectangle {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
 
+            focusPolicy: Qt.StrongFocus
+
             TapHandler {
                 onTapped: root.engine.setSource_open(true)
             }

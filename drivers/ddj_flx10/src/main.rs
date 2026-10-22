@@ -1,7 +1,10 @@
+#![feature(iter_array_chunks)]
+
 pub mod leds;
 pub mod logger;
-
-use std::{collections::BTreeMap, time::Duration};
+pub mod screens;
+pub mod usb;
+use std::{collections::BTreeMap, sync::LazyLock, time::Duration};
 
 use clap::Parser;
 use libdj::types::deck::DeckState;
@@ -11,18 +14,99 @@ use libio::{
         midi::{addr_channel_value_to_midi, midi_to_addr_value},
         midi_mapper::{MidiMapping, load_midi_mapping, process_midi_command},
     },
-    types::{ipc::DriverInfo, midi::MidiMessage},
+    types::{controller::ControllerEvent, ipc::DriverInfo},
 };
 use log::{error, info, warn};
-use midir::{MidiInput, MidiInputConnection, MidiOutput, SendError};
-use tokio::task::JoinHandle;
 
 use crate::{
     leds::{LEDFlashTimers, set_deck_leds},
     logger::setup_logger,
+    screens::set_deck_screens,
+    usb::{DeviceInitError, DeviceInterface, DeviceInterfaceEvent, wait_for_new_devices},
 };
 
-const MIDI_MAPPING: &str = include_str!("../ddj-flx10.txt");
+pub const MIDI_MAPPING: &str = include_str!("../ddj-flx10.txt");
+
+pub const VENDOR_ID: u16 = 0x2B73;
+pub const PRODUCT_ID: u16 = 0x0041;
+
+pub const EP2_IN: u8 = 0x82;
+pub const EP3_OUT: u8 = 0x03;
+pub const EP4_IN: u8 = 0x84;
+pub const EP5_OUT: u8 = 0x05;
+
+pub const VENDOR_COMMANDS: [(u16, u16); 7] = [
+    (0x0100, 0xC028),
+    (0x0000, 0xC029),
+    (0x0200, 0xC013),
+    (0x0000, 0xC02B),
+    (0x0100, 0xC026),
+    (0x0000, 0xC01D),
+    (0x0100, 0xC027),
+];
+
+pub const KEEPALIVE_FRAME: [u8; 16] = [
+    0x04, 0xf0, 0x00, 0x40, 0x04, 0x05, 0x00, 0x00, 0x04, 0x04, 0x01, 0x00, 0x07, 0x50, 0x00, 0xf7,
+];
+
+pub static REKORDBOX_INIT_SEQUENCE: LazyLock<Vec<[String; 2]>> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("../rekordbox_init_sequence.json"))
+        .expect("Invalid rekordbox init sequence")
+});
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PadMode {
+    HotCue,
+    BeatJump,
+    BeatLoop,
+    KeyShift,
+}
+
+#[derive(Debug, Clone)]
+pub struct InternalPlayerState {
+    pub pad_mode: PadMode,
+}
+
+impl Default for InternalPlayerState {
+    fn default() -> Self {
+        Self {
+            pad_mode: PadMode::HotCue,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InternalMixerState {
+    pub player: InternalPlayerState,
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for InternalMixerState {
+    fn default() -> Self {
+        Self {
+            player: InternalPlayerState::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InternalDeckState {
+    pub mixer_channels: [InternalMixerState; 4],
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for InternalDeckState {
+    fn default() -> Self {
+        Self {
+            mixer_channels: [
+                InternalMixerState::default(),
+                InternalMixerState::default(),
+                InternalMixerState::default(),
+                InternalMixerState::default(),
+            ],
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -37,18 +121,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     setup_logger(args.log_path)?;
 
+    let _ = LazyLock::force(&REKORDBOX_INIT_SEQUENCE);
+
     let midi_mapping = load_midi_mapping(MIDI_MAPPING);
 
     loop {
-        info!("Connecting to DDJ-FLX10 MIDI...");
+        info!("Connecting to DDJ-FLX10...");
 
-        let mut connection = match connect() {
-            Ok(connection) => connection,
-            Err(err) => {
-                warn!("Failed to connect to MIDI: {err}");
-                info!("Waiting for new MIDI ports to become available...");
+        let mut device_interfaces = match DeviceInterface::init_device().await {
+            Ok(device_interfaces) => device_interfaces,
+            Err(DeviceInitError::NotFound) => {
+                warn!("USB device not found");
+                info!("Waiting for new USB devices to become available...");
 
                 wait_for_new_devices().await;
+
+                continue;
+            }
+            Err(err) => {
+                warn!("Failed to init USB device, retrying: {err}");
+
+                tokio::time::sleep(Duration::from_secs(1)).await;
 
                 continue;
             }
@@ -73,120 +166,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         info!("IPC running, starting message relay.");
 
-        midi_loop(&mut ipc, &midi_mapping, &mut connection).await;
+        event_loop(&mut ipc, &midi_mapping, &mut device_interfaces).await;
 
-        info!("Midi disconnected, cleaning up...");
+        info!("Device disconnected, cleaning up...");
 
         drop(ipc);
 
-        connection.input_connection.close();
-        connection.output_task.abort();
+        drop(device_interfaces);
 
-        info!("Waiting for new MIDI ports to become available...");
+        info!("Waiting for new USB devices to become available...");
 
         wait_for_new_devices().await;
     }
 }
 
-async fn wait_for_new_devices() {
-    // todo: replace with a waiter when midir gets device listening support
-    tokio::time::sleep(Duration::from_secs(10)).await;
-}
-
-struct MidiConnection {
-    input_connection: MidiInputConnection<()>,
-    output_task: JoinHandle<()>,
-
-    sender: tokio::sync::mpsc::UnboundedSender<MidiMessage>,
-    receiver: tokio::sync::mpsc::UnboundedReceiver<MidiMessage>,
-
-    disconnection_signal: tokio::sync::oneshot::Receiver<()>,
-}
-
-fn connect() -> Result<MidiConnection, Box<dyn std::error::Error>> {
-    let (disconnection_sender, disconnection_receiver) = tokio::sync::oneshot::channel();
-
-    let (midi_input_sender, midi_input_receiver) =
-        tokio::sync::mpsc::unbounded_channel::<MidiMessage>();
-
-    let (midi_output_sender, mut midi_output_receiver) =
-        tokio::sync::mpsc::unbounded_channel::<MidiMessage>();
-
-    let midi_input = MidiInput::new("slipstream-midi-input")?;
-
-    let input_ports = midi_input.ports();
-
-    let Some(target_input_port) = input_ports.iter().find(|port| {
-        midi_input
-            .port_name(port)
-            .is_ok_and(|name| name.contains("DDJ-FLX10"))
-    }) else {
-        return Err("No input port found".into());
-    };
-
-    let input_port_name = midi_input.port_name(target_input_port)?;
-
-    let midi_output = MidiOutput::new("slipstream-midi-output")?;
-
-    let output_ports = midi_output.ports();
-
-    let Some(target_output_port) = output_ports.iter().find(|port| {
-        midi_output
-            .port_name(port)
-            .is_ok_and(|name| name.contains("DDJ-FLX10"))
-    }) else {
-        return Err("No output port found".into());
-    };
-
-    let output_port_name = midi_output.port_name(target_output_port)?;
-
-    let midi_input = midi_input.connect(
-        target_input_port,
-        &input_port_name,
-        move |_, message, ()| {
-            if let [byte_zero, byte_one, byte_two] = *message {
-                let _ = midi_input_sender.send([byte_zero, byte_one, byte_two]);
-            }
-        },
-        (),
-    )?;
-
-    let mut connection = midi_output.connect(target_output_port, &output_port_name)?;
-
-    let midi_output = tokio::task::spawn(async move {
-        while let Some(message) = &midi_output_receiver.recv().await {
-            if let Err(err) = connection.send(message) {
-                match err {
-                    SendError::InvalidData(_) => {}
-                    SendError::Other(_) => {
-                        break;
-                    }
-                }
-            }
-        }
-
-        let _ = disconnection_sender.send(());
-    });
-
-    Ok(MidiConnection {
-        input_connection: midi_input,
-        output_task: midi_output,
-
-        sender: midi_output_sender,
-        receiver: midi_input_receiver,
-
-        disconnection_signal: disconnection_receiver,
-    })
-}
-
-async fn midi_loop(
+async fn event_loop(
     ipc: &mut DriverIPC,
     midi_mapping: &MidiMapping,
-    connection: &mut MidiConnection,
+    connection: &mut DeviceInterface,
 ) {
     let mut current_deck_state: DeckState = DeckState::default();
+    let mut current_internal_deck_state: InternalDeckState = InternalDeckState::default();
 
-    let mut controller_state: BTreeMap<(&str, usize), (u8, u8)> = BTreeMap::new();
+    let mut controller_midi_state: BTreeMap<(&str, usize), (u8, u8)> = BTreeMap::new();
 
     let mut led_flash_timers = LEDFlashTimers {
         slow: false,
@@ -198,39 +200,61 @@ async fn midi_loop(
     let mut mid_flash_interval = tokio::time::interval(Duration::from_millis(250));
     let mut fast_flash_interval = tokio::time::interval(Duration::from_millis(100));
 
+    let mut update_jog_interval = tokio::time::interval(Duration::from_millis(20));
+
     loop {
         tokio::select! {
             _ = slow_flash_interval.tick() => {
                 led_flash_timers.slow = !led_flash_timers.slow;
 
-                set_deck_leds(&current_deck_state, &led_flash_timers, &connection.sender);
+                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
             }
             _ = mid_flash_interval.tick() => {
                 led_flash_timers.mid = !led_flash_timers.mid;
 
-                set_deck_leds(&current_deck_state, &led_flash_timers, &connection.sender);
+                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
             }
             _ = fast_flash_interval.tick() => {
                 led_flash_timers.fast = !led_flash_timers.fast;
 
-                set_deck_leds(&current_deck_state, &led_flash_timers, &connection.sender);
+                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
             }
-            midi_message = connection.receiver.recv() => {
-                if let Some(midi_message) = midi_message {
-                    let (address, value) = midi_to_addr_value(midi_message);
+            _ = update_jog_interval.tick() => {
+                set_deck_screens(&current_deck_state, &led_flash_timers, connection);
+            }
+            event = connection.read_event() => {
+                match event {
+                    DeviceInterfaceEvent::Disconnect => {
+                        break;
+                    },
+                    DeviceInterfaceEvent::MidiMessage(midi_message) => {
+                        let (address, value) = midi_to_addr_value(midi_message);
 
-                    process_midi_command(address, value, midi_mapping, &mut controller_state, ipc);
+                        if let Some(event) = process_midi_command(address, value, midi_mapping, &mut controller_midi_state) {
+                            postprocess_command(event, &current_deck_state, &mut current_internal_deck_state, &led_flash_timers, connection, ipc);
+                        }
+                    },
                 }
-            }
-            _ = &mut connection.disconnection_signal => {
-                break;
             }
             ipc_event = ipc.receive_message() => {
                 match ipc_event {
+                    IPCMessage::Connected => {
+                        // todo: replay analog knob events
+                    },
+                    IPCMessage::Disconnected => {
+                        current_deck_state = DeckState::default();
+
+                        set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
+                        set_deck_screens(&current_deck_state, &led_flash_timers, connection);
+
+                        for deck in 0..4 {
+                            connection.write_midi(addr_channel_value_to_midi(0xB002, deck, 0));
+                        }
+                    },
                     IPCMessage::UpdateDeckState(deck_state) => {
                         current_deck_state = deck_state;
 
-                        set_deck_leds(&current_deck_state, &led_flash_timers, &connection.sender);
+                        set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
                     },
                     IPCMessage::UpdateCurrentMeter(amplitudes) => {
                         for (deck, amplitudes) in amplitudes.into_iter().enumerate() {
@@ -264,11 +288,155 @@ async fn midi_loop(
                             let out_value = out_value.round() as u8;
 
                             #[allow(clippy::cast_possible_truncation)]
-                            let _ = connection.sender.send(addr_channel_value_to_midi(0xB002, deck as u16, out_value));
+                            connection.write_midi(addr_channel_value_to_midi(0xB002, deck as u16, out_value));
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+#[allow(clippy::indexing_slicing)]
+fn postprocess_command(
+    event: ControllerEvent,
+    deck_state: &DeckState,
+    internal_deck_state: &mut InternalDeckState,
+    _flash_timers: &LEDFlashTimers,
+    device_interface: &mut DeviceInterface,
+    ipc: &mut DriverIPC,
+) {
+    match event {
+        ControllerEvent::DriverInternalButton { id } => {
+            log::warn!("todo: bind internal driver event button_{id}");
+        }
+        ControllerEvent::DriverInternalButtonWithInteger { id, number } => match (id, number) {
+            (deck @ (0..=3), mode @ (0..=3)) => {
+                internal_deck_state.mixer_channels[deck].player.pad_mode = [
+                    PadMode::HotCue,
+                    PadMode::BeatJump,
+                    PadMode::BeatLoop,
+                    PadMode::KeyShift,
+                ][mode];
+
+                #[allow(clippy::cast_possible_truncation)]
+                match internal_deck_state.mixer_channels[deck].player.pad_mode {
+                    PadMode::HotCue => {
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x901B,
+                            deck as u16,
+                            127,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x9020,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x906D,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x906F,
+                            deck as u16,
+                            0,
+                        ));
+                    }
+                    PadMode::BeatJump => {
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x901B,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x9020,
+                            deck as u16,
+                            127,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x906D,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x906F,
+                            deck as u16,
+                            0,
+                        ));
+                    }
+                    PadMode::BeatLoop => {
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x901B,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x9020,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x906D,
+                            deck as u16,
+                            127,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x906F,
+                            deck as u16,
+                            0,
+                        ));
+                    }
+                    PadMode::KeyShift => {
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x901B,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x9020,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x906D,
+                            deck as u16,
+                            0,
+                        ));
+                        device_interface.write_midi(addr_channel_value_to_midi(
+                            0x906F,
+                            deck as u16,
+                            127,
+                        ));
+                    }
+                }
+            }
+            (id, number) => log::warn!("todo: bind internal driver events integer_{id}({number})"),
+        },
+        ControllerEvent::DriverInternalButtonWithFloat { id, number } => {
+            log::warn!("todo: bind internal driver events float_{id}({number})");
+        }
+        ControllerEvent::DriverInternalButtonWithAbsolute { id, position } => {
+            log::warn!("todo: bind internal driver events absolute_{id}({position})");
+        }
+        ControllerEvent::DriverInternalButtonWithRelative { id, delta } => {
+            log::warn!("todo: bind internal driver events relative_{id}({delta})");
+        }
+        ControllerEvent::PlayerBeatLoopExitPress { channel } => {
+            if let Some(player_channel) = deck_state.mixer_channels.get(channel)
+                && player_channel.player.beat_loop_start.is_some()
+                && player_channel.player.beat_loop_end.is_some()
+            {
+                ipc.send_event(ControllerEvent::PlayerBeatLoopExitPress { channel });
+            } else {
+                ipc.send_event(ControllerEvent::PlayerInstantLoopPress {
+                    channel,
+                    length: 4.0,
+                });
+            }
+        }
+        event => {
+            ipc.send_event(event);
         }
     }
 }

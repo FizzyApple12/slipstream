@@ -9,10 +9,11 @@
 
 # masks
 ->b(0x7F) # button, trigger value
-->n(0x7F,1) # numbered button, trigger value, button number
 ->a(msb,-1.0,1.0) # absolute position, msb (or lsb), range min, range max
 ->r(0x01,0x7F,0x3f,1.0) # relative position, msb (or lsb), range min, range max, distance per tick
 ->j() # jog
+->x(0x7F,1) # a button with an int parameter
+->y(0x7F,1.0) # a button with a float parameter
 
 # mappings
 :PlayPress # Maps to the "PlayPress" action
@@ -24,6 +25,8 @@
 #       for each unique position are still press actions
 # * _Set = an action that is used to set the value of a continuously-variable input
 # * _Adjust = an action that is used to adjust the value of a continuously-variable input
+# * DriverInternal_ = an action meant to be used inside the driver, the id comes from the channel so explicitly
+#                     match the midi data and override the channel to set the id (eg. 0x9147=34 gives and id of 34)
 
 # example line, 0x9n47 masked through a button triggering at 0x7F maps to shift + PlayPress
 0x9n47->b(0x7F):PlayPress

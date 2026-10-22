@@ -97,6 +97,12 @@ impl TrackProcessor {
             for input_buffer in &mut self.resampler_input_buffers {
                 input_buffer.fill(0.0);
             }
+
+            self.stretcher.set_speed(1.0);
+            self.stretcher.set_pitch_semitones(pitch as f64);
+
+            self.stretcher
+                .pull(&mut self.flush_disposal_buffers, number_samples);
         } else {
             for buffer in &mut self.resampler_input_buffers {
                 buffer.clear();

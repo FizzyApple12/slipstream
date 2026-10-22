@@ -4,6 +4,12 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Copy, Archive, Serialize, Deserialize, Debug, EnumStrConverters)]
 pub enum ControllerEvent {
+    DriverInternalButton { id: usize },
+    DriverInternalButtonWithInteger { id: usize, number: usize },
+    DriverInternalButtonWithFloat { id: usize, number: f32 },
+    DriverInternalButtonWithAbsolute { id: usize, position: f32 },
+    DriverInternalButtonWithRelative { id: usize, delta: f32 },
+
     // usb
     USBEjectPress { slot: usize },
     USBEjectRelease { slot: usize },
@@ -68,6 +74,7 @@ pub enum ControllerEvent {
 
     PlayerQuantizePress { channel: usize },
     PlayerSlipPress { channel: usize },
+    PlayerGateCuePress { channel: usize },
 
     PlayerPlayPress { channel: usize },
     PlayerReversePress { channel: usize },
@@ -78,11 +85,6 @@ pub enum ControllerEvent {
     PlayerCueRelease { channel: usize },
     PlayerAltCuePress { channel: usize },
     PlayerAltCueRelease { channel: usize },
-
-    PlayerBeatJumpBackwardRelease { channel: usize },
-    PlayerLongBeatJumpBackwardRelease { channel: usize },
-    PlayerBeatJumpForwardRelease { channel: usize },
-    PlayerLongBeatJumpForwardRelease { channel: usize },
 
     PlayerBeatSyncPress { channel: usize },
     PlayerBPMSyncPress { channel: usize },
@@ -100,7 +102,10 @@ pub enum ControllerEvent {
     PlayerBeatLoopOutAdjustPress { channel: usize },
     PlayerBeatLoopExitPress { channel: usize },
     PlayerReLoopPress { channel: usize },
-    PlayerInstantLoopPress { channel: usize },
 
-    PlayerPadPress { channel: usize, number: usize },
+    PlayerHotCuePress { channel: usize, number: usize },
+    PlayerHotCueRelease { channel: usize, number: usize },
+    PlayerBeatJumpPress { channel: usize, distance: f32 },
+    PlayerInstantLoopPress { channel: usize, length: f32 },
+    PlayerKeyShiftPress { channel: usize, shift: f32 },
 }

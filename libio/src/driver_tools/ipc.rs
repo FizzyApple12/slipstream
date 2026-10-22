@@ -1,10 +1,13 @@
-use std::{path::PathBuf, time::Duration};
+use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::PathBuf, time::Duration};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use interprocess::local_socket::{
-    GenericFilePath, ListenerNonblockingMode, ListenerOptions, ToFsName,
-    tokio::{RecvHalf, SendHalf},
-    traits::tokio::{Listener, Stream},
+use interprocess::{
+    local_socket::{
+        GenericFilePath, ListenerNonblockingMode, ListenerOptions, ToFsName,
+        tokio::{RecvHalf, SendHalf},
+        traits::tokio::{Listener, Stream},
+    },
+    os::unix::local_socket::ListenerOptionsExt,
 };
 use libdj::{AUDIO_CHANNELS, types::deck::DeckState};
 use log::{debug, info, warn};
@@ -20,6 +23,8 @@ use crate::types::{
 };
 
 pub enum IPCMessage {
+    Connected,
+    Disconnected,
     UpdateDeckState(DeckState),
     UpdateCurrentMeter([[f32; AUDIO_CHANNELS]; 4]),
 }
@@ -34,6 +39,9 @@ pub enum AdvertisementError {
 
     #[error("Cannot create file: {0}")]
     CreationFailed(std::io::Error),
+
+    #[error("Cannot set permissions of the socket file: {0}")]
+    SetPermissionsFailed(std::io::Error),
 }
 
 pub struct DriverIPC {
@@ -63,12 +71,13 @@ impl DriverIPC {
         if ipc_file.exists() {
             warn!("Socket already found, attempting to reclaim");
 
-            fs::remove_file(ipc_file.clone())
+            fs::remove_file(&ipc_file)
                 .await
                 .map_err(AdvertisementError::CreationFailed)?;
         }
 
         let socket_name = ipc_file
+            .clone()
             .to_fs_name::<GenericFilePath>()
             .map_err(AdvertisementError::InvalidAddress)?;
 
@@ -76,9 +85,14 @@ impl DriverIPC {
 
         let listener = ListenerOptions::new()
             .name(socket_name)
+            .mode(0o777)
             .nonblocking(ListenerNonblockingMode::Both)
             .create_tokio()
             .map_err(AdvertisementError::ListenFailed)?;
+
+        fs::set_permissions(&ipc_file, Permissions::from_mode(0o777))
+            .await
+            .map_err(AdvertisementError::SetPermissionsFailed)?;
 
         let (ipc_message_sender, ipc_message_receiver) = tokio::sync::mpsc::unbounded_channel();
         let (controller_event_sender, mut controller_event_receiver) =
@@ -117,6 +131,8 @@ impl DriverIPC {
                         }
                     }
                 }
+
+                let _ = ipc_message_sender.send(IPCMessage::Connected);
 
                 loop {
                     tokio::select! {
@@ -196,6 +212,8 @@ impl DriverIPC {
                         }
                     }
                 }
+
+                let _ = ipc_message_sender.send(IPCMessage::Disconnected);
             }
 
             drop(listener);

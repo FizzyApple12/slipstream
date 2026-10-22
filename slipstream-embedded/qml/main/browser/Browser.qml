@@ -35,6 +35,8 @@ FlexboxLayout {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
 
+            focusPolicy: Qt.StrongFocus
+
             color: root.engine.browser_page == BrowserPage.Search ? palette.accent : palette.base
 
             TapHandler {
@@ -55,6 +57,8 @@ FlexboxLayout {
         Rectangle {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
+
+            focusPolicy: Qt.StrongFocus
 
             color: root.engine.browser_page == BrowserPage.Track ? palette.accent : palette.base
 
@@ -77,6 +81,8 @@ FlexboxLayout {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
 
+            focusPolicy: Qt.StrongFocus
+
             color: root.engine.browser_page == BrowserPage.Artist ? palette.accent : palette.base
 
             TapHandler {
@@ -97,6 +103,8 @@ FlexboxLayout {
         Rectangle {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
+
+            focusPolicy: Qt.StrongFocus
 
             color: root.engine.browser_page == BrowserPage.Album ? palette.accent : palette.base
 
@@ -119,6 +127,8 @@ FlexboxLayout {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
 
+            focusPolicy: Qt.StrongFocus
+
             color: root.engine.browser_page == BrowserPage.Key ? palette.accent : palette.base
 
             TapHandler {
@@ -140,6 +150,8 @@ FlexboxLayout {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
 
+            focusPolicy: Qt.StrongFocus
+
             color: root.engine.browser_page == BrowserPage.Playlist ? palette.accent : palette.base
 
             TapHandler {
@@ -157,47 +169,51 @@ FlexboxLayout {
             }
         }
 
-        Rectangle {
-            Layout.preferredWidth: 48
-            Layout.preferredHeight: 48
+        // Rectangle {
+        //     Layout.preferredWidth: 48
+        //     Layout.preferredHeight: 48
 
-            color: root.engine.browser_page == BrowserPage.History ? palette.accent : palette.base
+        //     focusPolicy: Qt.StrongFocus
 
-            TapHandler {
-                onTapped: root.engine.select_browser_page(BrowserPage.History)
-            }
+        //     color: root.engine.browser_page == BrowserPage.History ? palette.accent : palette.base
 
-            Image {
-                anchors.centerIn: parent
-                width: 24
-                height: 24
-                sourceSize.width: 24
-                sourceSize.height: 24
+        //     TapHandler {
+        //         onTapped: root.engine.select_browser_page(BrowserPage.History)
+        //     }
 
-                source: "qrc:/icons/history.svg"
-            }
-        }
+        //     Image {
+        //         anchors.centerIn: parent
+        //         width: 24
+        //         height: 24
+        //         sourceSize.width: 24
+        //         sourceSize.height: 24
 
-        Rectangle {
-            Layout.preferredWidth: 48
-            Layout.preferredHeight: 48
+        //         source: "qrc:/icons/history.svg"
+        //     }
+        // }
 
-            color: root.engine.browser_page == BrowserPage.Device ? palette.accent : palette.base
+        // Rectangle {
+        //     Layout.preferredWidth: 48
+        //     Layout.preferredHeight: 48
 
-            TapHandler {
-                onTapped: root.engine.select_browser_page(BrowserPage.Device)
-            }
+        //     focusPolicy: Qt.StrongFocus
 
-            Image {
-                anchors.centerIn: parent
-                width: 24
-                height: 24
-                sourceSize.width: 24
-                sourceSize.height: 24
+        //     color: root.engine.browser_page == BrowserPage.Device ? palette.accent : palette.base
 
-                source: "qrc:/icons/folder.svg"
-            }
-        }
+        //     TapHandler {
+        //         onTapped: root.engine.select_browser_page(BrowserPage.Device)
+        //     }
+
+        //     Image {
+        //         anchors.centerIn: parent
+        //         width: 24
+        //         height: 24
+        //         sourceSize.width: 24
+        //         sourceSize.height: 24
+
+        //         source: "qrc:/icons/folder.svg"
+        //     }
+        // }
 
         Rectangle {
             Layout.preferredWidth: 48
@@ -270,6 +286,8 @@ FlexboxLayout {
                         Layout.preferredWidth: 48
                         Layout.preferredHeight: 48
 
+                        focusPolicy: Qt.StrongFocus
+
                         visible: root.engine.browser_page == BrowserPage.Artist
 
                         TapHandler {
@@ -290,6 +308,8 @@ FlexboxLayout {
                     Item {
                         Layout.preferredWidth: 48
                         Layout.preferredHeight: 48
+
+                        focusPolicy: Qt.StrongFocus
 
                         visible: root.engine.browser_page == BrowserPage.Album
 
@@ -312,6 +332,8 @@ FlexboxLayout {
                         Layout.preferredWidth: 48
                         Layout.preferredHeight: 48
 
+                        focusPolicy: Qt.StrongFocus
+
                         visible: root.engine.browser_page == BrowserPage.Key
 
                         TapHandler {
@@ -332,6 +354,8 @@ FlexboxLayout {
                     Item {
                         Layout.preferredWidth: 48
                         Layout.preferredHeight: 48
+
+                        focusPolicy: Qt.StrongFocus
 
                         visible: root.engine.browser_page == BrowserPage.Playlist
 
@@ -359,6 +383,8 @@ FlexboxLayout {
                     Item {
                         Layout.preferredWidth: 48
                         Layout.preferredHeight: 48
+
+                        focusPolicy: Qt.StrongFocus
 
                         visible: root.engine.browser_page == BrowserPage.History
 
@@ -407,6 +433,8 @@ FlexboxLayout {
                     	Layout.preferredWidth: 1000
                         Layout.fillHeight: true
                         verticalAlignment: Text.AlignVCenter
+
+                        focusPolicy: Qt.StrongFocus
 
                         visible: root.engine.browser_page == BrowserPage.Search
 
@@ -676,7 +704,9 @@ FlexboxLayout {
                 color: palette.accent
             }
             highlightMoveDuration: 0
-            focus: true
+            focusPolicy: Qt.StrongFocus
+
+            currentIndex: engine.highlighted_browser_index
 
             engine: root.engine
 
@@ -704,7 +734,7 @@ FlexboxLayout {
                 color: (index % 2 == 0) ? palette.base : palette.alternateBase
 
                 TapHandler {
-                    onTapped: listView.currentIndex = index
+                    onTapped: listView.engine.setHighlighted_browser_index(index)
                 }
 
                 FlexboxLayout {
@@ -950,13 +980,13 @@ FlexboxLayout {
 
                             onClicked: {
                             	if (delegate_root.entry_type == BrowserEntryType.Playlist) {
-                             		root.engine.push_playlist_node(delegate_root.node_id);
+                             		listView.engine.push_playlist_node(delegate_root.node_id);
                              	} else if (delegate_root.entry_type == BrowserEntryType.Artist) {
-                              		root.engine.select_artist(delegate_root.node_id);
+                              		listView.engine.select_artist(delegate_root.node_id);
                               	} else if (delegate_root.entry_type == BrowserEntryType.Album) {
-                               		root.engine.select_album(delegate_root.node_id);
+                               		listView.engine.select_album(delegate_root.node_id);
                                	} else if (delegate_root.entry_type == BrowserEntryType.Key) {
-                                	root.engine.select_key(delegate_root.node_id);
+                                	listView.engine.select_key(delegate_root.node_id);
                                 }
                             }
                             enabled: listView.engine.device_selected

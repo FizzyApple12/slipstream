@@ -54,6 +54,7 @@ pub enum DeckControlEvent {
 
     PlayerQuantizePress { channel: usize },
     PlayerSlipPress { channel: usize },
+    PlayerGateCuePress { channel: usize },
 
     PlayerPlayPress { channel: usize },
     PlayerReversePress { channel: usize },
@@ -64,11 +65,6 @@ pub enum DeckControlEvent {
     PlayerCueRelease { channel: usize },
     PlayerAltCuePress { channel: usize },
     PlayerAltCueRelease { channel: usize },
-
-    PlayerBeatJumpBackwardRelease { channel: usize },
-    PlayerLongBeatJumpBackwardRelease { channel: usize },
-    PlayerBeatJumpForwardRelease { channel: usize },
-    PlayerLongBeatJumpForwardRelease { channel: usize },
 
     PlayerBeatSyncPress { channel: usize },
     PlayerBPMSyncPress { channel: usize },
@@ -86,7 +82,10 @@ pub enum DeckControlEvent {
     PlayerBeatLoopOutAdjustPress { channel: usize },
     PlayerBeatLoopExitPress { channel: usize },
     PlayerReLoopPress { channel: usize },
-    PlayerInstantLoopPress { channel: usize },
 
-    PlayerPadPress { channel: usize, number: usize },
+    PlayerHotCuePress { channel: usize, number: usize },
+    PlayerHotCueRelease { channel: usize, number: usize },
+    PlayerBeatJumpPress { channel: usize, distance: f32 },
+    PlayerInstantLoopPress { channel: usize, length: f32 },
+    PlayerKeyShiftPress { channel: usize, shift: f32 },
 }

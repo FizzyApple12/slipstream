@@ -3,9 +3,8 @@ use std::collections::BTreeMap;
 use loop_unwrap::{ToOption, unwrap_continue};
 
 use crate::{
-    driver_tools::{
-        ipc::DriverIPC,
-        midi::{midi_rpm_to_f32, midi_split_pair_to_f32_range, midi_ticks_to_relative_ticks},
+    driver_tools::midi::{
+        midi_rpm_to_f32, midi_split_pair_to_f32_range, midi_ticks_to_relative_ticks,
     },
     types::controller::ControllerEvent,
 };
@@ -21,7 +20,8 @@ pub struct MidiMapping {
 #[derive(Debug)]
 pub enum MappingTarget {
     Button(u8),
-    NumberedButton(u8, usize),
+    ButtonWithInteger(u8, usize),
+    ButtonWithFloat(u8, f32),
     Absolute(BytePosition, f32, f32),
     Relative(u8, u8, u8, f32),
     Jog,
@@ -138,7 +138,7 @@ pub fn load_midi_mapping(mapping: &str) -> MidiMapping {
 
                 MappingTarget::Button(trigger)
             }
-            'n' => {
+            'x' => {
                 if args.len() != 2 {
                     continue 'outer;
                 }
@@ -155,7 +155,23 @@ pub fn load_midi_mapping(mapping: &str) -> MidiMapping {
                 let number: usize =
                     unwrap_continue!(usize::from_str_radix(number, number_radix), 'outer);
 
-                MappingTarget::NumberedButton(trigger, number)
+                MappingTarget::ButtonWithInteger(trigger, number)
+            }
+            'y' => {
+                if args.len() != 2 {
+                    continue 'outer;
+                }
+
+                let trigger: &String = unwrap_continue!(args.first(), 'outer);
+                let trigger_radix = if trigger.starts_with("0x") { 16 } else { 10 };
+                let trigger = trigger.trim_start_matches("0x");
+                let trigger: u8 =
+                    unwrap_continue!(u8::from_str_radix(trigger, trigger_radix), 'outer);
+
+                let number: &String = unwrap_continue!(args.get(1), 'outer);
+                let number: f32 = unwrap_continue!(number.parse::<f32>(), 'outer);
+
+                MappingTarget::ButtonWithFloat(trigger, number)
             }
             'a' => {
                 if args.len() != 3 {
@@ -287,18 +303,17 @@ pub fn process_midi_command(
     value: u8,
     mappings: &MidiMapping,
     persistence_store: &mut BTreeMap<(&str, usize), (u8, u8)>,
-    ipc: &mut DriverIPC,
-) {
+) -> Option<ControllerEvent> {
     if let Some(mappings) = mappings.direct.get(&address) {
         for (mapping_target, event) in mappings {
             if let Some(event) =
                 apply_mapping_to_event(value, 0, mapping_target, *event, persistence_store)
             {
-                ipc.send_event(event);
+                return Some(event);
             }
         }
 
-        return;
+        return None;
     }
 
     if let Some(mappings) = mappings.direct_equals.get(&address) {
@@ -306,11 +321,11 @@ pub fn process_midi_command(
             if let Some(event) =
                 apply_mapping_to_event(value, *channel, mapping_target, *action, persistence_store)
             {
-                ipc.send_event(event);
+                return Some(event);
             }
         }
 
-        return;
+        return None;
     }
 
     for index in (0..4).rev() {
@@ -328,13 +343,15 @@ pub fn process_midi_command(
                     *event,
                     persistence_store,
                 ) {
-                    ipc.send_event(event);
+                    return Some(event);
                 }
             }
 
-            return;
+            return None;
         }
     }
+
+    None
 }
 
 fn apply_mapping_to_event(
@@ -348,7 +365,8 @@ fn apply_mapping_to_event(
     let mut new_velocity: f32 = 0.0;
     let mut new_delta: f32 = 0.0;
 
-    let mut source_number: usize = 0;
+    let mut source_parameter_integer: usize = 0;
+    let mut source_parameter_float: f32 = 0.0;
 
     match target {
         MappingTarget::Button(target) => {
@@ -356,12 +374,19 @@ fn apply_mapping_to_event(
                 return None;
             }
         }
-        MappingTarget::NumberedButton(target, number) => {
+        MappingTarget::ButtonWithInteger(target, number) => {
             if value != *target {
                 return None;
             }
 
-            source_number = *number;
+            source_parameter_integer = *number;
+        }
+        MappingTarget::ButtonWithFloat(target, number) => {
+            if value != *target {
+                return None;
+            }
+
+            source_parameter_float = *number;
         }
         MappingTarget::Absolute(byte_position, min, max) => {
             let (msb, lsb) = if let Some((msb, lsb)) =
@@ -436,15 +461,24 @@ fn apply_mapping_to_event(
             *delta = new_delta;
         }
 
-        ControllerEvent::PlayerPlayPress { channel }
+        ControllerEvent::MixerHeadphonesMixSet { position }
+        | ControllerEvent::MixerHeadphonesGainSet { position }
+        | ControllerEvent::MixerMasterFXDepthSet { position }
+        | ControllerEvent::MixerMasterGainSet { position }
+        | ControllerEvent::MixerCrossfaderSet { position } => {
+            *position = new_position;
+        }
+
+        ControllerEvent::MixerChannelFXPress { number } => {
+            *number = source_parameter_integer;
+        }
+
+        ControllerEvent::DriverInternalButton { id: channel }
+        | ControllerEvent::PlayerPlayPress { channel }
         | ControllerEvent::PlayerCuePress { channel }
         | ControllerEvent::PlayerCueRelease { channel }
         | ControllerEvent::PlayerAltCuePress { channel }
         | ControllerEvent::PlayerAltCueRelease { channel }
-        | ControllerEvent::PlayerBeatJumpBackwardRelease { channel }
-        | ControllerEvent::PlayerLongBeatJumpBackwardRelease { channel }
-        | ControllerEvent::PlayerBeatJumpForwardRelease { channel }
-        | ControllerEvent::PlayerLongBeatJumpForwardRelease { channel }
         | ControllerEvent::PlayerBeatSyncPress { channel }
         | ControllerEvent::PlayerMasterPress { channel }
         | ControllerEvent::PlayerTempoResetPress { channel }
@@ -458,6 +492,7 @@ fn apply_mapping_to_event(
         | ControllerEvent::MixerChannelCrossfaderAssignBPress { channel }
         | ControllerEvent::PlayerQuantizePress { channel }
         | ControllerEvent::PlayerSlipPress { channel }
+        | ControllerEvent::PlayerGateCuePress { channel }
         | ControllerEvent::PlayerReversePress { channel }
         | ControllerEvent::PlayerReverseRelease { channel }
         | ControllerEvent::PlayerSlipReversePress { channel }
@@ -470,7 +505,6 @@ fn apply_mapping_to_event(
         | ControllerEvent::PlayerBeatLoopOutAdjustPress { channel }
         | ControllerEvent::PlayerBeatLoopExitPress { channel }
         | ControllerEvent::PlayerReLoopPress { channel }
-        | ControllerEvent::PlayerInstantLoopPress { channel }
         | ControllerEvent::MixerChannelMasterFXTargetPress { channel } => {
             *channel = new_channel;
         }
@@ -481,7 +515,11 @@ fn apply_mapping_to_event(
             *velocity = new_velocity;
         }
 
-        ControllerEvent::MixerChannelGainSet { channel, position }
+        ControllerEvent::DriverInternalButtonWithAbsolute {
+            id: channel,
+            position,
+        }
+        | ControllerEvent::MixerChannelGainSet { channel, position }
         | ControllerEvent::MixerChannelEqHighSet { channel, position }
         | ControllerEvent::MixerChannelEqMidSet { channel, position }
         | ControllerEvent::MixerChannelEqLowSet { channel, position }
@@ -492,25 +530,43 @@ fn apply_mapping_to_event(
             *position = new_position;
         }
 
-        ControllerEvent::MixerHeadphonesMixSet { position }
-        | ControllerEvent::MixerHeadphonesGainSet { position }
-        | ControllerEvent::MixerMasterFXDepthSet { position }
-        | ControllerEvent::MixerMasterGainSet { position }
-        | ControllerEvent::MixerCrossfaderSet { position } => {
-            *position = new_position;
-        }
-
-        ControllerEvent::PlayerPadPress { channel, number } => {
+        ControllerEvent::DriverInternalButtonWithRelative { id: channel, delta } => {
             *channel = new_channel;
-            *number = source_number;
+            *delta = new_delta;
         }
 
-        ControllerEvent::MixerChannelFXPress { number } => {
-            *number = source_number;
+        ControllerEvent::DriverInternalButtonWithInteger {
+            id: channel,
+            number,
+        }
+        | ControllerEvent::PlayerHotCuePress { channel, number }
+        | ControllerEvent::PlayerHotCueRelease { channel, number } => {
+            *channel = new_channel;
+            *number = source_parameter_integer;
+        }
+
+        ControllerEvent::DriverInternalButtonWithFloat {
+            id: channel,
+            number,
+        }
+        | ControllerEvent::PlayerBeatJumpPress {
+            channel,
+            distance: number,
+        }
+        | ControllerEvent::PlayerInstantLoopPress {
+            channel,
+            length: number,
+        }
+        | ControllerEvent::PlayerKeyShiftPress {
+            channel,
+            shift: number,
+        } => {
+            *channel = new_channel;
+            *number = source_parameter_float;
         }
 
         ControllerEvent::USBEjectPress { slot } | ControllerEvent::USBEjectRelease { slot } => {
-            *slot = source_number;
+            *slot = source_parameter_integer;
         }
     }
 

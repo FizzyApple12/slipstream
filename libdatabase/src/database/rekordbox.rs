@@ -360,6 +360,48 @@ impl RekordboxDatabase {
         let mut memory_cues_cache = Vec::new();
 
         let anlz_path = track.analysis_path.clone();
+        let mut extended_cue_list_exists = false;
+
+        let mut extended_anlz_path = track.analysis_path.clone();
+        extended_anlz_path.set_extension("EXT");
+
+        let Ok(mut extended_anlz_file) = File::open(extended_anlz_path) else {
+            return Err(LoadAnalysisError::AnalysisNotFound);
+        };
+
+        if let Ok(anlz) = ANLZ::read(&mut extended_anlz_file) {
+            for section in anlz.sections {
+                if let rekordcrate::anlz::Content::ExtendedCueList(extended_cue_list) =
+                    section.content
+                {
+                    debug!(target: "libdatabase::database::rekordbox", "{extended_cue_list:?}");
+
+                    extended_cue_list_exists = true;
+
+                    for cue in extended_cue_list.cues {
+                        if cue.hot_cue == 0 {
+                            memory_cues_cache.push(MemoryCue {
+                                time: Timecode::from_milliseconds(i64::from(cue.time)),
+                                comment: cue.comment.to_string(),
+                            });
+                        } else {
+                            hot_cues_cache.push(HotCue {
+                                number: cue.hot_cue - 1,
+                                color: cue_color_from_index(cue.hot_cue_color_index),
+                                cue_type: match cue.cue_type {
+                                    rekordcrate::anlz::CueType::Point => CueType::Point,
+                                    rekordcrate::anlz::CueType::Loop => CueType::Loop(
+                                        Timecode::from_milliseconds(i64::from(cue.loop_time)),
+                                    ),
+                                },
+                                time: Timecode::from_milliseconds(i64::from(cue.time)),
+                                comment: cue.comment.to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
 
         let Ok(mut anlz_file) = File::open(anlz_path) else {
             return Err(LoadAnalysisError::AnalysisNotFound);
@@ -382,6 +424,10 @@ impl RekordboxDatabase {
                     rekordcrate::anlz::Content::CueList(cue_list) => {
                         debug!(target: "libdatabase::database::rekordbox", "{cue_list:?}");
 
+                        if extended_cue_list_exists {
+                            continue;
+                        }
+
                         for cue in cue_list.cues {
                             if cue.hot_cue == 0 {
                                 memory_cues_cache.push(MemoryCue {
@@ -390,7 +436,8 @@ impl RekordboxDatabase {
                                 });
                             } else {
                                 hot_cues_cache.push(HotCue {
-                                    cue_number: cue.hot_cue,
+                                    number: cue.hot_cue - 1,
+                                    color: (0xff, 0xff, 0xff),
                                     cue_type: match cue.cue_type {
                                         rekordcrate::anlz::CueType::Point => CueType::Point,
                                         rekordcrate::anlz::CueType::Loop => CueType::Loop(
@@ -399,98 +446,6 @@ impl RekordboxDatabase {
                                     },
                                     time: Timecode::from_milliseconds(i64::from(cue.time)),
                                     comment: String::new(),
-                                    color_index: 0,
-                                    color_rgb: (255, 255, 255),
-                                });
-                            }
-                        }
-                    }
-                    rekordcrate::anlz::Content::ExtendedCueList(extended_cue_list) => {
-                        debug!(target: "libdatabase::database::rekordbox", "{extended_cue_list:?}");
-
-                        for cue in extended_cue_list.cues {
-                            if cue.hot_cue == 0 {
-                                memory_cues_cache.push(MemoryCue {
-                                    time: Timecode::from_milliseconds(i64::from(cue.time)),
-                                    comment: cue.comment.to_string(),
-                                });
-                            } else {
-                                hot_cues_cache.push(HotCue {
-                                    cue_number: cue.hot_cue,
-                                    cue_type: match cue.cue_type {
-                                        rekordcrate::anlz::CueType::Point => CueType::Point,
-                                        rekordcrate::anlz::CueType::Loop => CueType::Loop(
-                                            Timecode::from_milliseconds(i64::from(cue.loop_time)),
-                                        ),
-                                    },
-                                    time: Timecode::from_milliseconds(i64::from(cue.time)),
-                                    comment: cue.comment.to_string(),
-                                    color_index: cue.hot_cue_color_index,
-                                    color_rgb: match cue.hot_cue_color_index {
-                                        0x01 => (0x30, 0x5a, 0xff),
-                                        0x02 => (0x50, 0x73, 0xff),
-                                        0x03 => (0x50, 0x8c, 0xff),
-                                        0x04 => (0x50, 0xa0, 0xff),
-                                        0x05 => (0x50, 0xb4, 0xff),
-                                        0x06 => (0x50, 0xb0, 0xf2),
-                                        0x07 => (0x50, 0xae, 0xe8),
-                                        0x08 => (0x45, 0xac, 0xdb),
-                                        0x09 => (0x00, 0xe0, 0xff),
-                                        0x0a => (0x19, 0xda, 0xf0),
-                                        0x0b => (0x32, 0xd2, 0xe6),
-                                        0x0c => (0x21, 0xb4, 0xb9),
-                                        0x0d => (0x20, 0xaa, 0xa0),
-                                        0x0e => (0x1f, 0xa3, 0x92),
-                                        0x0f => (0x19, 0xa0, 0x8c),
-                                        0x10 => (0x14, 0xa5, 0x84),
-                                        0x11 => (0x14, 0xaa, 0x7d),
-                                        0x12 => (0x10, 0xb1, 0x76),
-                                        0x13 => (0x30, 0xd2, 0x6e),
-                                        0x14 => (0x37, 0xde, 0x5a),
-                                        0x15 => (0x3c, 0xeb, 0x50),
-                                        0x16 => (0x28, 0xe2, 0x14),
-                                        0x17 => (0x7d, 0xc1, 0x3d),
-                                        0x18 => (0x8c, 0xc8, 0x32),
-                                        0x19 => (0x9b, 0xd7, 0x23),
-                                        0x1a => (0xa5, 0xe1, 0x16),
-                                        0x1b => (0xa5, 0xdc, 0x0a),
-                                        0x1c => (0xaa, 0xd2, 0x08),
-                                        0x1d => (0xb4, 0xc8, 0x05),
-                                        0x1e => (0xb4, 0xbe, 0x04),
-                                        0x1f => (0xba, 0xb4, 0x04),
-                                        0x20 => (0xc3, 0xaf, 0x04),
-                                        0x21 => (0xe1, 0xaa, 0x00),
-                                        0x22 => (0xff, 0xa0, 0x00),
-                                        0x23 => (0xff, 0x96, 0x00),
-                                        0x24 => (0xff, 0x8c, 0x00),
-                                        0x25 => (0xff, 0x75, 0x00),
-                                        0x26 => (0xe0, 0x64, 0x1b),
-                                        0x27 => (0xe0, 0x46, 0x1e),
-                                        0x28 => (0xe0, 0x30, 0x1e),
-                                        0x29 => (0xe0, 0x28, 0x23),
-                                        0x2a => (0xe6, 0x28, 0x28),
-                                        0x2b => (0xff, 0x37, 0x6f),
-                                        0x2c => (0xff, 0x2d, 0x6f),
-                                        0x2d => (0xff, 0x12, 0x7b),
-                                        0x2e => (0xf5, 0x1e, 0x8c),
-                                        0x2f => (0xeb, 0x2d, 0xa0),
-                                        0x30 => (0xe6, 0x37, 0xb4),
-                                        0x31 => (0xde, 0x44, 0xcf),
-                                        0x32 => (0xde, 0x44, 0x8d),
-                                        0x33 => (0xe6, 0x30, 0xb4),
-                                        0x34 => (0xe6, 0x19, 0xdc),
-                                        0x35 => (0xe6, 0x00, 0xff),
-                                        0x36 => (0xdc, 0x00, 0xff),
-                                        0x37 => (0xcc, 0x00, 0xff),
-                                        0x38 => (0xb4, 0x32, 0xff),
-                                        0x39 => (0xb9, 0x3c, 0xff),
-                                        0x3a => (0xc5, 0x42, 0xff),
-                                        0x3b => (0xaa, 0x5a, 0xff),
-                                        0x3c => (0xaa, 0x72, 0xff),
-                                        0x3d => (0x82, 0x72, 0xff),
-                                        0x3e => (0x64, 0x73, 0xff),
-                                        _ => (0x00, 0x00, 0xff),
-                                    },
                                 });
                             }
                         }
@@ -711,4 +666,72 @@ impl RekordboxDatabase {
 
 pub fn strip_path_string(path: &str) -> String {
     path.replace(|c: char| !c.is_ascii(), "?")
+}
+
+pub fn cue_color_from_index(color_index: u8) -> (u8, u8, u8) {
+    match color_index {
+        0x01 => (0x30, 0x5a, 0xff),
+        0x02 => (0x50, 0x73, 0xff),
+        0x03 => (0x50, 0x8c, 0xff),
+        0x04 => (0x50, 0xa0, 0xff),
+        0x05 => (0x50, 0xb4, 0xff),
+        0x06 => (0x50, 0xb0, 0xf2),
+        0x07 => (0x50, 0xae, 0xe8),
+        0x08 => (0x45, 0xac, 0xdb),
+        0x09 => (0x00, 0xe0, 0xff),
+        0x0a => (0x19, 0xda, 0xf0),
+        0x0b => (0x32, 0xd2, 0xe6),
+        0x0c => (0x21, 0xb4, 0xb9),
+        0x0d => (0x20, 0xaa, 0xa0),
+        0x0e => (0x1f, 0xa3, 0x92),
+        0x0f => (0x19, 0xa0, 0x8c),
+        0x10 => (0x14, 0xa5, 0x84),
+        0x11 => (0x14, 0xaa, 0x7d),
+        0x12 => (0x10, 0xb1, 0x76),
+        0x13 => (0x30, 0xd2, 0x6e),
+        0x14 => (0x37, 0xde, 0x5a),
+        0x15 => (0x3c, 0xeb, 0x50),
+        0x16 => (0x28, 0xe2, 0x14),
+        0x17 => (0x7d, 0xc1, 0x3d),
+        0x18 => (0x8c, 0xc8, 0x32),
+        0x19 => (0x9b, 0xd7, 0x23),
+        0x1a => (0xa5, 0xe1, 0x16),
+        0x1b => (0xa5, 0xdc, 0x0a),
+        0x1c => (0xaa, 0xd2, 0x08),
+        0x1d => (0xb4, 0xc8, 0x05),
+        0x1e => (0xb4, 0xbe, 0x04),
+        0x1f => (0xba, 0xb4, 0x04),
+        0x20 => (0xc3, 0xaf, 0x04),
+        0x21 => (0xe1, 0xaa, 0x00),
+        0x22 => (0xff, 0xa0, 0x00),
+        0x23 => (0xff, 0x96, 0x00),
+        0x24 => (0xff, 0x8c, 0x00),
+        0x25 => (0xff, 0x75, 0x00),
+        0x26 => (0xe0, 0x64, 0x1b),
+        0x27 => (0xe0, 0x46, 0x1e),
+        0x28 => (0xe0, 0x30, 0x1e),
+        0x29 => (0xe0, 0x28, 0x23),
+        0x2a => (0xe6, 0x28, 0x28),
+        0x2b => (0xff, 0x37, 0x6f),
+        0x2c => (0xff, 0x2d, 0x6f),
+        0x2d => (0xff, 0x12, 0x7b),
+        0x2e => (0xf5, 0x1e, 0x8c),
+        0x2f => (0xeb, 0x2d, 0xa0),
+        0x30 => (0xe6, 0x37, 0xb4),
+        0x31 => (0xde, 0x44, 0xcf),
+        0x32 => (0xde, 0x44, 0x8d),
+        0x33 => (0xe6, 0x30, 0xb4),
+        0x34 => (0xe6, 0x19, 0xdc),
+        0x35 => (0xe6, 0x00, 0xff),
+        0x36 => (0xdc, 0x00, 0xff),
+        0x37 => (0xcc, 0x00, 0xff),
+        0x38 => (0xb4, 0x32, 0xff),
+        0x39 => (0xb9, 0x3c, 0xff),
+        0x3a => (0xc5, 0x42, 0xff),
+        0x3b => (0xaa, 0x5a, 0xff),
+        0x3c => (0xaa, 0x72, 0xff),
+        0x3d => (0x82, 0x72, 0xff),
+        0x3e => (0x64, 0x73, 0xff),
+        _ => (0x00, 0x00, 0xff),
+    }
 }

@@ -17,7 +17,7 @@ ApplicationWindow {
     x: 0
     y: 0
     width: 2560
-    height: 700
+    height: 720
     visible: true
     flags: Qt.FramelessWindowHint
     color: palette.window
@@ -149,7 +149,7 @@ ApplicationWindow {
         x: 0
         y: 0
         width: 2560
-        height: 700
+        height: 720
 
         visible: root.engine.browser_page != BrowserPage.Closed
 
@@ -178,7 +178,7 @@ ApplicationWindow {
         x: 0
         y: 0
         width: 2560
-        height: 700
+        height: 720
 
         visible: root.engine.source_open
 
@@ -246,6 +246,145 @@ ApplicationWindow {
             let item = root.activeFocusItem;
 
             item.focus = false;
+        }
+    }
+
+    FlexboxLayout {
+        anchors.centerIn: parent
+        direction: FlexboxLayout.Column
+        justifyContent: FlexboxLayout.JustifyCenter
+        alignContent: FlexboxLayout.AlignCenter
+        alignItems: FlexboxLayout.AlignCenter
+
+        gap: 8
+
+        visible: root.engine.load_popup_showing
+
+        Rectangle {
+            Layout.preferredWidth: 280
+            Layout.preferredHeight: 280
+
+            color: "#ff1f1f1f"
+
+            FlexboxLayout {
+                anchors.fill: parent
+                direction: FlexboxLayout.Column
+                justifyContent: FlexboxLayout.JustifyCenter
+                alignContent: FlexboxLayout.AlignCenter
+                alignItems: FlexboxLayout.AlignCenter
+
+                gap: 8
+
+                FlexboxLayout {
+                    Layout.preferredWidth: 280
+                    Layout.preferredHeight: 128
+                    direction: FlexboxLayout.Row
+                    justifyContent: FlexboxLayout.JustifyCenter
+                    alignContent: FlexboxLayout.AlignCenter
+                    alignItems: FlexboxLayout.AlignCenter
+
+                    gap: 8
+
+                    Button {
+                        Layout.preferredWidth: 128
+                        Layout.preferredHeight: 128
+
+                        text: "Load on 1"
+                        font.pointSize: 12
+                        font.variableAxes: {
+                            "opsz": 10
+                        }
+                        font.weight: Font.Medium
+
+                        background: Rectangle {
+                            color: palette.light
+                        }
+
+                        onClicked: () => {
+                            root.engine.load_track(0, root.engine.active_device, root.engine.load_popup_node_id);
+                            root.engine.setLoad_popup_showing(false);
+                        }
+                        enabled: root.engine.device_selected
+                    }
+
+                    Button {
+                        Layout.preferredWidth: 128
+                        Layout.preferredHeight: 128
+
+                        text: "Load on 2"
+                        font.pointSize: 12
+                        font.variableAxes: {
+                            "opsz": 10
+                        }
+                        font.weight: Font.Medium
+
+                        background: Rectangle {
+                            color: palette.light
+                        }
+
+                        onClicked: () => {
+                            root.engine.load_track(1, root.engine.active_device, root.engine.load_popup_node_id);
+                            root.engine.setLoad_popup_showing(false);
+                        }
+                        enabled: root.engine.device_selected
+                    }
+                }
+
+                FlexboxLayout {
+                    Layout.preferredWidth: 280
+                    Layout.preferredHeight: 128
+                    direction: FlexboxLayout.Row
+                    justifyContent: FlexboxLayout.JustifyCenter
+                    alignContent: FlexboxLayout.AlignCenter
+                    alignItems: FlexboxLayout.AlignCenter
+
+                    gap: 8
+
+                    Button {
+                        Layout.preferredWidth: 128
+                        Layout.preferredHeight: 128
+
+                        text: "Load on 3"
+                        font.pointSize: 12
+                        font.variableAxes: {
+                            "opsz": 10
+                        }
+                        font.weight: Font.Medium
+
+                        background: Rectangle {
+                            color: palette.light
+                        }
+
+                        onClicked: () => {
+                            root.engine.load_track(2, root.engine.active_device, root.engine.load_popup_node_id);
+                            root.engine.setLoad_popup_showing(false);
+                        }
+                        enabled: root.engine.device_selected
+                    }
+
+                    Button {
+                        Layout.preferredWidth: 128
+                        Layout.preferredHeight: 128
+
+                        text: "Load on 4"
+                        font.pointSize: 12
+                        font.variableAxes: {
+                            "opsz": 10
+                        }
+                        font.weight: Font.Medium
+
+                        background: Rectangle {
+                            color: palette.light
+                        }
+
+                        onClicked: () => {
+                            root.engine.load_track(3, root.engine.active_device, root.engine.load_popup_node_id);
+                            root.engine.setLoad_popup_showing(false);
+                        }
+                        enabled: root.engine.device_selected
+                    }
+                }
+            }
         }
     }
 }

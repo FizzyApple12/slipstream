@@ -17,141 +17,154 @@ FlexboxLayout {
 
     gap: 8
 
-    ListView {
-        id: listView
-        required property EngineBridge engine
 
+    FlexboxLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        clip: true
+        direction: FlexboxLayout.Column
+        justifyContent: FlexboxLayout.JustifyStart
+        alignItems: FlexboxLayout.AlignStart
 
-        engine: root.engine
+		Item {
+		    Layout.preferredHeight: 8
+		}
 
-        model: root.engine.source_index
-        delegate: FlexboxLayout {
-            id: delegate_root
-            required property int index
-            required property int device_number
-            required property string label
+	    ListView {
+	        id: listView
+	        required property EngineBridge engine
 
-            width: listView.width
-            direction: FlexboxLayout.Column
-            justifyContent: FlexboxLayout.JustifyCenter
-            alignContent: FlexboxLayout.AlignStretch
+	        Layout.fillWidth: true
+	        Layout.fillHeight: true
+	        clip: true
 
-            Item {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 8
-            }
+	        highlight: Rectangle {
+	            color: palette.base
+	        }
+	        highlightMoveDuration: 0
+	        focusPolicy: Qt.StrongFocus
+	        spacing: 8
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 48
+            currentIndex: engine.highlighted_source_index
 
-                color: palette.base
+	        engine: root.engine
 
-                TapHandler {
-                    onTapped: listView.engine.select_device(delegate_root.device_number)
-                }
+	        model: root.engine.source_index
+	        delegate: Rectangle {
+				id: delegate_root
+				required property int index
+				required property int device_number
+				required property string label
 
-                FlexboxLayout {
-                    anchors.fill: parent
-                    direction: FlexboxLayout.Row
-                    justifyContent: FlexboxLayout.JustifyStart
-                    alignContent: FlexboxLayout.AlignStretch
+				width: listView.width
+		        height: 48
 
-                    gap: 8
+		        color: palette.base
 
-                    Item {
-                        Layout.preferredWidth: 48
-                        Layout.preferredHeight: 48
+		        TapHandler {
+		            onTapped: {
+						listView.engine.setHighlighted_source_index(index);
+						listView.engine.select_device(delegate_root.device_number);
+					}
+		        }
 
-                        Rectangle {
-                            width: 48
-                            height: 48
+		        FlexboxLayout {
+		            anchors.fill: parent
+		            direction: FlexboxLayout.Row
+		            justifyContent: FlexboxLayout.JustifyStart
+		            alignContent: FlexboxLayout.AlignStretch
 
-                            color: palette.accent
+		            gap: 8
 
-                            Image {
-                                anchors.centerIn: parent
-                                width: 24
-                                height: 24
-                                sourceSize.width: 24
-                                sourceSize.height: 24
+		            Item {
+		                Layout.preferredWidth: 48
+		                Layout.preferredHeight: 48
 
-                                source: "qrc:/icons/usb.svg"
-                            }
-                        }
+		                Rectangle {
+		                    width: 48
+		                    height: 48
 
-                        Rectangle {
-                            width: 14
-                            height: 14
+		                    color: palette.accent
 
-                            color: palette.light
+		                    Image {
+		                        anchors.centerIn: parent
+		                        width: 24
+		                        height: 24
+		                        sourceSize.width: 24
+		                        sourceSize.height: 24
 
-                            Label {
-                                anchors.centerIn: parent
+		                        source: "qrc:/icons/usb.svg"
+		                    }
+		                }
 
-                                text: "" + delegate_root.device_number
+		                Rectangle {
+		                    width: 14
+		                    height: 14
 
-                                font.pointSize: 8
-                                font.variableAxes: {
-                                    "opsz": 10
-                                }
-                                font.weight: Font.Medium
+		                    color: palette.light
 
-                                color: palette.dark
-                            }
-                        }
-                    }
+		                    Label {
+		                        anchors.centerIn: parent
 
-                    Item {
-                        Layout.preferredWidth: 0
-                    }
+		                        text: "" + delegate_root.device_number
 
-                    Text {
-                        Layout.fillHeight: true
-                        Layout.preferredWidth: 400
-                        verticalAlignment: Text.AlignVCenter
+		                        font.pointSize: 8
+		                        font.variableAxes: {
+		                            "opsz": 10
+		                        }
+		                        font.weight: Font.Medium
 
-                        text: delegate_root.label
+		                        color: palette.dark
+		                    }
+		                }
+		            }
 
-                        font.pointSize: 12
-                        font.variableAxes: {
-                            "opsz": 10
-                        }
-                        font.weight: Font.Medium
+		            Item {
+		                Layout.preferredWidth: 0
+		            }
 
-                        color: palette.text
-                    }
+		            Text {
+		                Layout.fillHeight: true
+		                Layout.preferredWidth: 400
+		                verticalAlignment: Text.AlignVCenter
 
-                    Item {
-                        Layout.fillWidth: true
-                    }
+		                text: delegate_root.label
 
-                    Item {
-                        Layout.preferredWidth: 48
-                        Layout.preferredHeight: 48
+		                font.pointSize: 12
+		                font.variableAxes: {
+		                    "opsz": 10
+		                }
+		                font.weight: Font.Medium
 
-                        Image {
-                            anchors.centerIn: parent
-                            width: 24
-                            height: 24
-                            sourceSize.width: 24
-                            sourceSize.height: 24
+		                color: palette.text
+		            }
 
-                            source: {
-                                if (root.engine.device_selected && root.engine.active_device == delegate_root.device_number) {
-                                    return "qrc:/icons/check.svg";
-                                } else {
-                                    return "qrc:/icons/chevron-right.svg";
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+		            Item {
+		                Layout.fillWidth: true
+		            }
+
+		            Item {
+		                Layout.preferredWidth: 48
+		                Layout.preferredHeight: 48
+
+		                Image {
+		                    anchors.centerIn: parent
+		                    width: 24
+		                    height: 24
+		                    sourceSize.width: 24
+		                    sourceSize.height: 24
+
+		                    source: {
+		                        if (root.engine.device_selected && root.engine.active_device == delegate_root.device_number) {
+		                            return "qrc:/icons/check.svg";
+		                        } else {
+		                            return "qrc:/icons/chevron-right.svg";
+		                        }
+		                    }
+		                }
+		            }
+		        }
+	        }
+	    }
     }
 
     Rectangle {

@@ -24,12 +24,49 @@ pub enum UIControlEvent {
 }
 
 pub enum MappedEvent {
+    Invalid,
     UIControlEvent(UIControlEvent),
     DeckControlEvent(DeckControlEvent),
 }
 
 pub fn map_controller_event(event: ControllerEvent) -> MappedEvent {
     match event {
+        ControllerEvent::DriverInternalButton { id } => {
+            log::warn!("Received internal driver event {id}, please check your code!");
+
+            MappedEvent::Invalid
+        }
+        ControllerEvent::DriverInternalButtonWithInteger { id, number } => {
+            log::warn!(
+                "Received internal driver event {id} with int parameter {number}, please check \
+                 your code!"
+            );
+
+            MappedEvent::Invalid
+        }
+        ControllerEvent::DriverInternalButtonWithFloat { id, number } => {
+            log::warn!(
+                "Received internal driver event {id} with number parameter {number}, please check \
+                 your code!"
+            );
+
+            MappedEvent::Invalid
+        }
+        ControllerEvent::DriverInternalButtonWithAbsolute { id, position } => {
+            log::warn!(
+                "Received internal driver event {id} with position {position}, please check your \
+                 code!"
+            );
+
+            MappedEvent::Invalid
+        }
+        ControllerEvent::DriverInternalButtonWithRelative { id, delta } => {
+            log::warn!(
+                "Received internal driver event {id} with delta {delta}, please check your code!"
+            );
+
+            MappedEvent::Invalid
+        }
         ControllerEvent::USBEjectPress { slot } => {
             MappedEvent::UIControlEvent(UIControlEvent::USBEjectPress { slot })
         }
@@ -191,6 +228,9 @@ pub fn map_controller_event(event: ControllerEvent) -> MappedEvent {
         ControllerEvent::PlayerSlipPress { channel } => {
             MappedEvent::DeckControlEvent(DeckControlEvent::PlayerSlipPress { channel })
         }
+        ControllerEvent::PlayerGateCuePress { channel } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerGateCuePress { channel })
+        }
         ControllerEvent::PlayerPlayPress { channel } => {
             MappedEvent::DeckControlEvent(DeckControlEvent::PlayerPlayPress { channel })
         }
@@ -217,26 +257,6 @@ pub fn map_controller_event(event: ControllerEvent) -> MappedEvent {
         }
         ControllerEvent::PlayerAltCueRelease { channel } => {
             MappedEvent::DeckControlEvent(DeckControlEvent::PlayerAltCueRelease { channel })
-        }
-        ControllerEvent::PlayerBeatJumpBackwardRelease { channel } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerBeatJumpBackwardRelease {
-                channel,
-            })
-        }
-        ControllerEvent::PlayerLongBeatJumpBackwardRelease { channel } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerLongBeatJumpBackwardRelease {
-                channel,
-            })
-        }
-        ControllerEvent::PlayerBeatJumpForwardRelease { channel } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerBeatJumpForwardRelease {
-                channel,
-            })
-        }
-        ControllerEvent::PlayerLongBeatJumpForwardRelease { channel } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerLongBeatJumpForwardRelease {
-                channel,
-            })
         }
         ControllerEvent::PlayerBeatSyncPress { channel } => {
             MappedEvent::DeckControlEvent(DeckControlEvent::PlayerBeatSyncPress { channel })
@@ -282,11 +302,27 @@ pub fn map_controller_event(event: ControllerEvent) -> MappedEvent {
         ControllerEvent::PlayerReLoopPress { channel } => {
             MappedEvent::DeckControlEvent(DeckControlEvent::PlayerReLoopPress { channel })
         }
-        ControllerEvent::PlayerInstantLoopPress { channel } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerInstantLoopPress { channel })
+
+        ControllerEvent::PlayerHotCuePress { channel, number } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerHotCuePress { channel, number })
         }
-        ControllerEvent::PlayerPadPress { channel, number } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerPadPress { channel, number })
+        ControllerEvent::PlayerHotCueRelease { channel, number } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerHotCueRelease { channel, number })
+        }
+        ControllerEvent::PlayerBeatJumpPress { channel, distance } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerBeatJumpPress {
+                channel,
+                distance,
+            })
+        }
+        ControllerEvent::PlayerInstantLoopPress { channel, length } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerInstantLoopPress {
+                channel,
+                length,
+            })
+        }
+        ControllerEvent::PlayerKeyShiftPress { channel, shift } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::PlayerKeyShiftPress { channel, shift })
         }
     }
 }

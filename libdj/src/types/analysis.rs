@@ -44,12 +44,11 @@ pub struct MemoryCue {
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 pub struct HotCue {
-    pub cue_number: u32,
+    pub number: u32,
+    pub color: (u8, u8, u8),
     pub cue_type: CueType,
     pub time: Timecode,
     pub comment: String,
-    pub color_index: u8,
-    pub color_rgb: (u8, u8, u8),
 }
 
 #[derive(Debug, Clone, Copy, Archive, Deserialize, Serialize)]

@@ -177,6 +177,7 @@ pub struct PlayerState {
                                             * previous loop */
     pub beat_loop_adjust_mode: BeatLoopAdjustMode,
 
+    pub gate_cue: bool,
     pub keyshift: f32, // semitones
 }
 
@@ -218,6 +219,7 @@ impl Default for PlayerState {
             last_beat_loop: None,
             beat_loop_adjust_mode: BeatLoopAdjustMode::None,
 
+            gate_cue: true,
             keyshift: 0.0,
         }
     }

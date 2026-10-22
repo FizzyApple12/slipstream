@@ -44,7 +44,7 @@ impl PlayerState {
 
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     pub fn update_jog(&mut self, _start_time: Timecode, _end_time: Timecode) {
-        self.jog_velocity *= 0.9;
+        self.jog_velocity *= 0.5;
 
         if (-JOG_DEADBAND..JOG_DEADBAND).contains(&self.jog_velocity) {
             self.jog_velocity = 0.0;
@@ -163,6 +163,8 @@ impl PlayerState {
                     } else {
                         *loop_start += jog_time;
                     }
+
+                    self.last_beat_loop = Some((*loop_start, *loop_end));
                 }
 
                 (false, false)
@@ -187,6 +189,8 @@ impl PlayerState {
                     } else {
                         *loop_end += jog_time;
                     }
+
+                    self.last_beat_loop = Some((*loop_start, *loop_end));
                 }
 
                 (false, false)

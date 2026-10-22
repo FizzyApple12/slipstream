@@ -121,6 +121,9 @@ impl DeckControlEvent {
             DeckControlEvent::PlayerSlipPress { channel } => {
                 player_slip_press(deck_state, channel);
             }
+            DeckControlEvent::PlayerGateCuePress { channel } => {
+                player_gate_cue_press(deck_state, channel);
+            }
 
             DeckControlEvent::PlayerPlayPress { channel } => {
                 player_play_press(deck_state, channel);
@@ -146,19 +149,6 @@ impl DeckControlEvent {
             DeckControlEvent::PlayerCueRelease { channel }
             | DeckControlEvent::PlayerAltCueRelease { channel } => {
                 player_cue_release(deck_state, channel);
-            }
-
-            DeckControlEvent::PlayerBeatJumpBackwardRelease { channel } => {
-                player_beat_jump_release(deck_state, channel, false, false);
-            }
-            DeckControlEvent::PlayerLongBeatJumpBackwardRelease { channel } => {
-                player_beat_jump_release(deck_state, channel, false, true);
-            }
-            DeckControlEvent::PlayerBeatJumpForwardRelease { channel } => {
-                player_beat_jump_release(deck_state, channel, true, false);
-            }
-            DeckControlEvent::PlayerLongBeatJumpForwardRelease { channel } => {
-                player_beat_jump_release(deck_state, channel, true, true);
             }
 
             DeckControlEvent::PlayerBeatSyncPress { channel } => {
@@ -205,12 +195,21 @@ impl DeckControlEvent {
             DeckControlEvent::PlayerReLoopPress { channel } => {
                 player_re_loop_press(deck_state, channel);
             }
-            DeckControlEvent::PlayerInstantLoopPress { channel } => {
-                player_instant_loop_press(deck_state, channel);
-            }
 
-            DeckControlEvent::PlayerPadPress { channel, number } => {
-                log::warn!("Unbound Action: Player Pad {number} on channel {channel}");
+            DeckControlEvent::PlayerHotCuePress { channel, number } => {
+                player_hot_cue_press(deck_state, channel, number);
+            }
+            DeckControlEvent::PlayerHotCueRelease { channel, number } => {
+                player_hot_cue_release(deck_state, channel, number);
+            }
+            DeckControlEvent::PlayerBeatJumpPress { channel, distance } => {
+                player_beat_jump_press(deck_state, channel, distance);
+            }
+            DeckControlEvent::PlayerInstantLoopPress { channel, length } => {
+                player_instant_loop_press(deck_state, channel, length);
+            }
+            DeckControlEvent::PlayerKeyShiftPress { channel, shift } => {
+                player_key_shift_press(deck_state, channel, shift);
             }
         }
     }

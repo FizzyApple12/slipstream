@@ -92,6 +92,58 @@ FlexboxLayout {
             property variant waveform: root.engine.deck_state.mixer_channel(root.player_number).player.waveform_texture_source
         }
 
+        Repeater {
+            model: root.engine.deck_state.mixer_channel(root.player_number).player.hot_cues
+
+            Item {
+            	id: beat_root
+
+           		required property var number
+           		required property var color
+            	required property var time
+           		required property bool has_loop
+            	required property var loop_end
+             	required property string comment
+
+                x: waveform_container.position_element(time) - 8
+                width: 16
+                height: waveform_container.height
+                y: 0
+
+                Label {
+                	x: 0
+                 	y: 0
+                 	width: 16
+                  	height: 16
+                  	verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignHCenter
+
+                    font.pointSize: 10
+                    font.variableAxes: {
+                        "opsz": 4
+                    }
+                    font.weight: Font.Bold
+
+                    color: palette.highlightedText
+
+                    background: Rectangle {
+                        color: beat_root.color
+                    }
+
+                    text: (beat_root.number + 10).toString(36).toUpperCase()
+                }
+
+                Rectangle {
+                    x: 8
+                    width: 1
+                    height: waveform_container.height - 12
+                    y: 16
+
+                    color: beat_root.color
+                }
+            }
+        }
+
         // beat loop area
         Rectangle {
             x: waveform_container.position_element(root.engine.deck_state.mixer_channel(root.player_number).player.beat_loop_start)
