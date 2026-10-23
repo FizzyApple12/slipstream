@@ -446,18 +446,13 @@ fn apply_mapping_to_event(
         | ControllerEvent::MixerMasterFXEnablePress
         | ControllerEvent::BrowserSearchPress
         | ControllerEvent::MixerMasterCuePress
-        | ControllerEvent::MixerMasterFXSelectTouchPress
-        | ControllerEvent::MixerMasterFXSelectTouchRelease
-        | ControllerEvent::MixerMasterFXParameterSelectPress
-        | ControllerEvent::MixerMasterFXBPMSelectPress
+        | ControllerEvent::MixerMasterFXParameterDecreasePress
+        | ControllerEvent::MixerMasterFXParameterIncreasePress
+        | ControllerEvent::MixerMasterFXTargetMasterPress
         | ControllerEvent::MixerChannelFXProximityPress
-        | ControllerEvent::MixerChannelFXProximityRelease
-        | ControllerEvent::MixerMasterMasterFXTargetPress => {}
+        | ControllerEvent::MixerChannelFXProximityRelease => {}
 
-        ControllerEvent::BrowserEncoderAdjust { delta }
-        | ControllerEvent::MixerMasterFXSelect { delta }
-        | ControllerEvent::MixerMasterFXParameterAdjust { delta }
-        | ControllerEvent::MixerMasterFXBPMAdjust { delta } => {
+        ControllerEvent::BrowserEncoderAdjust { delta } => {
             *delta = new_delta;
         }
 
@@ -469,7 +464,10 @@ fn apply_mapping_to_event(
             *position = new_position;
         }
 
-        ControllerEvent::MixerChannelFXPress { number } => {
+        ControllerEvent::MixerMasterFXEffectPress { number }
+        | ControllerEvent::MixerMasterFXTargetChannelPress { number }
+        | ControllerEvent::MixerChannelFXEffectPress { number }
+        | ControllerEvent::MixerChannelFXEffectRelease { number } => {
             *number = source_parameter_integer;
         }
 
@@ -504,8 +502,7 @@ fn apply_mapping_to_event(
         | ControllerEvent::PlayerBeatLoopOutPress { channel }
         | ControllerEvent::PlayerBeatLoopOutAdjustPress { channel }
         | ControllerEvent::PlayerBeatLoopExitPress { channel }
-        | ControllerEvent::PlayerReLoopPress { channel }
-        | ControllerEvent::MixerChannelMasterFXTargetPress { channel } => {
+        | ControllerEvent::PlayerReLoopPress { channel } => {
             *channel = new_channel;
         }
 

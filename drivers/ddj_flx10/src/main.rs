@@ -7,7 +7,7 @@ pub mod usb;
 use std::{collections::BTreeMap, sync::LazyLock, time::Duration};
 
 use clap::Parser;
-use libdj::types::deck::DeckState;
+use libdj::types::{deck::DeckState, library::TrackID};
 use libio::{
     driver_tools::{
         ipc::{DriverIPC, IPCMessage},
@@ -65,12 +65,18 @@ pub enum PadMode {
 #[derive(Debug, Clone)]
 pub struct InternalPlayerState {
     pub pad_mode: PadMode,
+    pub last_keyshift: f32,
+    pub last_loaded_track: Option<(usize, TrackID)>,
+    pub last_loaded_analysis: bool,
 }
 
 impl Default for InternalPlayerState {
     fn default() -> Self {
         Self {
             pad_mode: PadMode::HotCue,
+            last_keyshift: 0.0,
+            last_loaded_track: None,
+            last_loaded_analysis: false,
         }
     }
 }
@@ -207,20 +213,30 @@ async fn event_loop(
             _ = slow_flash_interval.tick() => {
                 led_flash_timers.slow = !led_flash_timers.slow;
 
-                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
+                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, true, true, connection);
+
+                update_internal_deck_state(&current_deck_state, &mut current_internal_deck_state);
             }
             _ = mid_flash_interval.tick() => {
                 led_flash_timers.mid = !led_flash_timers.mid;
 
-                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
+                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, true, false, connection);
+
+                update_internal_deck_state(&current_deck_state, &mut current_internal_deck_state);
             }
             _ = fast_flash_interval.tick() => {
                 led_flash_timers.fast = !led_flash_timers.fast;
 
-                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
+                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, true, false, connection);
+
+                update_internal_deck_state(&current_deck_state, &mut current_internal_deck_state);
             }
             _ = update_jog_interval.tick() => {
                 set_deck_screens(&current_deck_state, &led_flash_timers, connection);
+
+                set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, false, false, connection);
+
+                update_internal_deck_state(&current_deck_state, &mut current_internal_deck_state);
             }
             event = connection.read_event() => {
                 match event {
@@ -244,17 +260,17 @@ async fn event_loop(
                     IPCMessage::Disconnected => {
                         current_deck_state = DeckState::default();
 
-                        set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
+                        set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, true, true, connection);
                         set_deck_screens(&current_deck_state, &led_flash_timers, connection);
 
                         for deck in 0..4 {
                             connection.write_midi(addr_channel_value_to_midi(0xB002, deck, 0));
                         }
+
+                        update_internal_deck_state(&current_deck_state, &mut current_internal_deck_state);
                     },
                     IPCMessage::UpdateDeckState(deck_state) => {
                         current_deck_state = deck_state;
-
-                        set_deck_leds(&current_deck_state, &current_internal_deck_state, &led_flash_timers, connection);
                     },
                     IPCMessage::UpdateCurrentMeter(amplitudes) => {
                         for (deck, amplitudes) in amplitudes.into_iter().enumerate() {
@@ -438,5 +454,22 @@ fn postprocess_command(
         event => {
             ipc.send_event(event);
         }
+    }
+}
+
+fn update_internal_deck_state(deck_state: &DeckState, internal_deck_state: &mut InternalDeckState) {
+    for (channel_state, internal_channel_state) in deck_state
+        .mixer_channels
+        .iter()
+        .zip(&mut internal_deck_state.mixer_channels)
+    {
+        internal_channel_state.player.last_keyshift = channel_state.player.keyshift;
+        internal_channel_state.player.last_loaded_track = channel_state
+            .player
+            .current_track
+            .as_ref()
+            .map(|(device, track)| (*device, track.id));
+        internal_channel_state.player.last_loaded_analysis =
+            channel_state.player.current_track_analysis.is_some();
     }
 }

@@ -24,22 +24,27 @@ pub enum ControllerEvent {
     BrowserPlaylistPress,
     BrowserSearchPress,
 
-    // mixer
+    // mixer, todo: come up with a better control management scheme that supports more styles of
+    // input
     MixerMasterGainSet { position: f32 },
     MixerMasterCuePress,
-    MixerMasterMasterFXTargetPress,
 
-    MixerMasterFXSelect { delta: f32 },
-    MixerMasterFXSelectTouchPress,
-    MixerMasterFXSelectTouchRelease,
-    MixerMasterFXParameterAdjust { delta: f32 },
-    MixerMasterFXParameterSelectPress,
-    MixerMasterFXBPMAdjust { delta: f32 },
-    MixerMasterFXBPMSelectPress,
+    MixerMasterFXEffectPress { number: usize },
+    MixerMasterFXParameterDecreasePress,
+    MixerMasterFXParameterIncreasePress,
+    MixerMasterFXTargetMasterPress,
+    // MixerMasterFXChange { delta: f32 },
+    // MixerMasterFXChangeTouchPress,
+    // MixerMasterFXChangeTouchRelease,
+    // MixerMasterFXParameterAdjust { delta: f32 },
+    // MixerMasterFXParameterSelectPress,
+    // MixerMasterFXBPMAdjust { delta: f32 },
+    // MixerMasterFXBPMSelectPress,
     MixerMasterFXDepthSet { position: f32 },
     MixerMasterFXEnablePress,
 
-    MixerChannelFXPress { number: usize },
+    MixerChannelFXEffectPress { number: usize },
+    MixerChannelFXEffectRelease { number: usize },
     MixerChannelFXProximityPress,
     MixerChannelFXProximityRelease,
 
@@ -58,7 +63,7 @@ pub enum ControllerEvent {
     MixerChannelFXSet { channel: usize, position: f32 },
 
     MixerChannelCuePress { channel: usize },
-    MixerChannelMasterFXTargetPress { channel: usize },
+    MixerMasterFXTargetChannelPress { number: usize },
 
     MixerChannelFaderSet { channel: usize, position: f32 },
 

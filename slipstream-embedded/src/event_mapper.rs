@@ -100,38 +100,29 @@ pub fn map_controller_event(event: ControllerEvent) -> MappedEvent {
         ControllerEvent::MixerMasterCuePress => {
             MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterCuePress)
         }
-        ControllerEvent::MixerMasterMasterFXTargetPress => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterMasterFXTargetPress)
+        ControllerEvent::MixerMasterFXEffectPress { number } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXEffectPress { number })
         }
-        ControllerEvent::MixerMasterFXSelect { delta } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXSelect { delta })
+        ControllerEvent::MixerMasterFXParameterDecreasePress => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXParameterDecreasePress)
         }
-        ControllerEvent::MixerMasterFXSelectTouchPress => {
-            MappedEvent::UIControlEvent(UIControlEvent::MixerMasterFXSelectTouchPress)
-        }
-        ControllerEvent::MixerMasterFXSelectTouchRelease => {
-            MappedEvent::UIControlEvent(UIControlEvent::MixerMasterFXSelectTouchRelease)
-        }
-        ControllerEvent::MixerMasterFXParameterAdjust { delta } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXParameterAdjust { delta })
-        }
-        ControllerEvent::MixerMasterFXParameterSelectPress => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXParameterSelectPress)
-        }
-        ControllerEvent::MixerMasterFXBPMAdjust { delta } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXBPMAdjust { delta })
-        }
-        ControllerEvent::MixerMasterFXBPMSelectPress => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXBPMSelectPress)
+        ControllerEvent::MixerMasterFXParameterIncreasePress => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXParameterIncreasePress)
         }
         ControllerEvent::MixerMasterFXDepthSet { position } => {
             MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXDepthSet { position })
         }
+        ControllerEvent::MixerMasterFXTargetMasterPress => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXTargetMasterPress)
+        }
         ControllerEvent::MixerMasterFXEnablePress => {
             MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXEnablePress)
         }
-        ControllerEvent::MixerChannelFXPress { number } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::MixerChannelFXPress { number })
+        ControllerEvent::MixerChannelFXEffectPress { number } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::MixerChannelFXEffectPress { number })
+        }
+        ControllerEvent::MixerChannelFXEffectRelease { number } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::MixerChannelFXEffectRelease { number })
         }
         ControllerEvent::MixerChannelFXProximityPress => {
             MappedEvent::UIControlEvent(UIControlEvent::MixerChannelFXProximityPress)
@@ -178,9 +169,9 @@ pub fn map_controller_event(event: ControllerEvent) -> MappedEvent {
         ControllerEvent::MixerChannelCuePress { channel } => {
             MappedEvent::DeckControlEvent(DeckControlEvent::MixerChannelCuePress { channel })
         }
-        ControllerEvent::MixerChannelMasterFXTargetPress { channel } => {
-            MappedEvent::DeckControlEvent(DeckControlEvent::MixerChannelMasterFXTargetPress {
-                channel,
+        ControllerEvent::MixerMasterFXTargetChannelPress { number } => {
+            MappedEvent::DeckControlEvent(DeckControlEvent::MixerMasterFXTargetChannelPress {
+                number,
             })
         }
         ControllerEvent::MixerChannelFaderSet { channel, position } => {

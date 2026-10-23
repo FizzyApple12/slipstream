@@ -14,12 +14,15 @@ layout(binding = 1) uniform sampler2D waveform;
 #define uv qt_TexCoord0
 
 void main() {
-	float y_nudge = (1.0 / ceil(stride)) / 2.0;
-	vec2 target_position = vec2(
-            mod(uv.x * stride, 1.0),
-            (floor(uv.x * stride) / ceil(stride)) + y_nudge
-        );
-    vec4 wave_data = texture(waveform, target_position);
+    vec2 texSize = vec2(16384.0 * min(stride, 1.0), ceil(stride));
+
+    float rows = ceil(stride);
+    vec2 target_position = vec2(
+        mod(uv.x * stride, 1.0),
+        (floor(uv.x * stride) + 0.5) / rows
+    );
+
+    vec4 wave_data = textureLod(waveform, target_position, 0.0);
 
     float inside = clamp(sign(wave_data.a - abs(0.5 - uv.y)), 0.0, 1.0);
 
@@ -27,26 +30,7 @@ void main() {
     float inside_mid = clamp(sign(wave_data.g - abs(0.5 - uv.y)), 0.0, 1.0);
     float inside_low = clamp(sign(wave_data.b - abs(0.5 - uv.y)), 0.0, 1.0);
 
-    // frag_color = vec4(0.0);
-    // frag_color = mix(
-    //         vec4(0.0745098039216, 0.305882352941, 0.843137254902, 1.0),
-    //         frag_color,
-    //         1.0 - inside_low
-    //     );
-    // frag_color = mix(
-    //         vec4(0.996978431373, 0.607843137255, 0.16862745098, 1.0),
-    //         frag_color,
-    //         1.0 - inside_mid
-    //     );
-    // frag_color = mix(
-    //         vec4(0.662745098039, 0.360784313725, 0.117647058824, 1.0),
-    //         frag_color,
-    //         1.0 - min(inside_low, inside_mid)
-    //     );
-    // frag_color = mix(vec4(1.0, 1.0, 1.0, 1.0), frag_color, 1.0 - inside_high);
-
     frag_color = vec4(0.0);
-    // frag_color = vec4(target_position.x, 0.0, target_position.y, 1.0);
     frag_color = mix(vec4(vec3(0.0), 1.0), frag_color, 1.0 - inside_high);
     frag_color = mix(
             vec4(0.0745098039216, 0.305882352941, 0.843137254902, 1.0),

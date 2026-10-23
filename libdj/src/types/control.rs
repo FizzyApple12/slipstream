@@ -11,17 +11,21 @@ pub enum DeckControlEvent {
     // mixer
     MixerMasterGainSet { position: f32 },
     MixerMasterCuePress,
-    MixerMasterMasterFXTargetPress,
 
-    MixerMasterFXSelect { delta: f32 },
-    MixerMasterFXParameterAdjust { delta: f32 },
-    MixerMasterFXParameterSelectPress,
-    MixerMasterFXBPMAdjust { delta: f32 },
-    MixerMasterFXBPMSelectPress,
+    // MixerMasterFXSelect { delta: f32 },
+    // MixerMasterFXParameterAdjust { delta: f32 },
+    // MixerMasterFXParameterSelectPress,
+    // MixerMasterFXBPMAdjust { delta: f32 },
+    // MixerMasterFXBPMSelectPress,
+    MixerMasterFXEffectPress { number: usize },
+    MixerMasterFXParameterDecreasePress,
+    MixerMasterFXParameterIncreasePress,
+    MixerMasterFXTargetMasterPress,
     MixerMasterFXDepthSet { position: f32 },
     MixerMasterFXEnablePress,
 
-    MixerChannelFXPress { number: usize },
+    MixerChannelFXEffectPress { number: usize },
+    MixerChannelFXEffectRelease { number: usize },
 
     MixerCrossfaderSet { position: f32 },
 
@@ -38,7 +42,7 @@ pub enum DeckControlEvent {
     MixerChannelFXSet { channel: usize, position: f32 },
 
     MixerChannelCuePress { channel: usize },
-    MixerChannelMasterFXTargetPress { channel: usize },
+    MixerMasterFXTargetChannelPress { number: usize },
 
     MixerChannelFaderSet { channel: usize, position: f32 },
 

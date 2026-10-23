@@ -495,7 +495,7 @@ use cxx_qt_lib::{
     QByteArray, QHash, QList, QMap, QMapPair_QString_QVariant, QModelIndex, QObjectExt, QString,
     QVariant,
 };
-use libdatabase::device_manager::DeviceManager;
+use libdatabase::{database::rekordbox::strip_path_string, device_manager::DeviceManager};
 use libdj::{engine::DJEngineHandle, math::harmonics::Key};
 use libdsp::audio_loader::TrackAudioData;
 use log::warn;
@@ -1671,20 +1671,26 @@ impl qobject::EngineBridge {
                     {
                         Ok(audio_data) => audio_data,
                         Err(err) => {
-                            // todo: build a way to propagate errors to the ui
-                            warn!("Track load error: {err:?}");
+                            if let Ok(audio_data) = TrackAudioData::load_from_file(
+                                &strip_path_string(cloned_track.audio_path.clone()),
+                            ) {
+                                audio_data
+                            } else {
+                                // todo: build a way to propagate errors to the ui
+                                warn!("Track load error: {err:?}");
 
-                            cloned_engine_connection.send_update_event(Box::new(
-                                move |deck_state, _| {
-                                    if let Some(mixer_channel) =
-                                        deck_state.mixer_channels.get_mut(player)
-                                    {
-                                        mixer_channel.player.is_loading = false;
-                                    }
-                                },
-                            ));
+                                cloned_engine_connection.send_update_event(Box::new(
+                                    move |deck_state, _| {
+                                        if let Some(mixer_channel) =
+                                            deck_state.mixer_channels.get_mut(player)
+                                        {
+                                            mixer_channel.player.is_loading = false;
+                                        }
+                                    },
+                                ));
 
-                            return;
+                                return;
+                            }
                         }
                     };
 

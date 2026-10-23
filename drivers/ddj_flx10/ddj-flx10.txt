@@ -29,25 +29,45 @@
 0x9415->b(0x7F):MixerMasterMasterFXTargetPress
 0x9416->b(0x7F):MixerMasterMasterFXTargetPress
 
-# MixerMasterFXSelect
-# MixerMasterFXSelectTouchPress
-# MixerMasterFXSelectTouchRelease
-# MixerMasterFXParameterAdjust
-# MixerMasterFXParameterSelectPress
-# MixerMasterFXBPMAdjust
-# MixerMasterFXBPMSelectPress
+0x944A->b(0x7F):MixerMasterFXParameterDecreasePress
+0x944B->b(0x7F):MixerMasterFXParameterIncreasePress
+
+0x9420->x(0x7F,0):MixerMasterFXEffectPress
+0x9421->x(0x7F,1):MixerMasterFXEffectPress
+0x9422->x(0x7F,2):MixerMasterFXEffectPress
+0x9423->x(0x7F,3):MixerMasterFXEffectPress
+0x9424->x(0x7F,4):MixerMasterFXEffectPress
+0x9425->x(0x7F,5):MixerMasterFXEffectPress
+0x9426->x(0x7F,6):MixerMasterFXEffectPress
+0x9427->x(0x7F,7):MixerMasterFXEffectPress
+0x9428->x(0x7F,8):MixerMasterFXEffectPress
+0x9429->x(0x7F,9):MixerMasterFXEffectPress
+0x942A->x(0x7F,10):MixerMasterFXEffectPress
+0x942B->x(0x7F,11):MixerMasterFXEffectPress
+
+0x9410->x(0x7F,0):MixerMasterFXTargetChannelPress
+0x9411->x(0x7F,1):MixerMasterFXTargetChannelPress
+0x9412->x(0x7F,2):MixerMasterFXTargetChannelPress
+0x9413->x(0x7F,3):MixerMasterFXTargetChannelPress
+0x9414->b(0x7F):MixerMasterFXTargetMasterPress
+
 0xB402->a(msb,0.0,1.0):MixerMasterFXDepthSet
 0xB422->a(lsb,0.0,1.0):MixerMasterFXDepthSet
 0x9447->b(0x7F):MixerMasterFXEnablePress
 
-0x9600->x(0x7F,0):MixerChannelFXPress
-0x9601->x(0x7F,1):MixerChannelFXPress
-0x9602->x(0x7F,2):MixerChannelFXPress
-0x9603->x(0x7F,3):MixerChannelFXPress
-0x9604->x(0x7F,4):MixerChannelFXPress
-0x9605->x(0x7F,5):MixerChannelFXPress
-# MixerChannelFXProximityPress
-# MixerChannelFXProximityRelease
+0x9600->x(0x7F,0):MixerChannelFXEffectPress
+0x9601->x(0x7F,1):MixerChannelFXEffectPress
+0x9602->x(0x7F,2):MixerChannelFXEffectPress
+0x9603->x(0x7F,3):MixerChannelFXEffectPress
+0x9604->x(0x7F,4):MixerChannelFXEffectPress
+0x9605->x(0x7F,5):MixerChannelFXEffectPress
+
+0x9600->x(0x00,0):MixerChannelFXEffectRelease
+0x9601->x(0x00,1):MixerChannelFXEffectRelease
+0x9602->x(0x00,2):MixerChannelFXEffectRelease
+0x9603->x(0x00,3):MixerChannelFXEffectRelease
+0x9604->x(0x00,4):MixerChannelFXEffectRelease
+0x9605->x(0x00,5):MixerChannelFXEffectRelease
 
 0xB61F->a(msb,-1.0,1.0):MixerCrossfaderSet
 0xB63F->a(lsb,-1.0,1.0):MixerCrossfaderSet

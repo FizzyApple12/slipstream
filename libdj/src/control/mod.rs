@@ -19,38 +19,32 @@ pub mod sliders;
 impl DeckControlEvent {
     // there are a lot of button bindings
     pub fn use_binding(self, deck_state: &mut DeckState) {
+        #[allow(clippy::match_same_arms)]
         match self {
             // mixer
             DeckControlEvent::MixerMasterGainSet { position } => {
                 mixer_master_gain_set(deck_state, position);
             }
             DeckControlEvent::MixerMasterCuePress => mixer_master_cue_press(deck_state),
-            DeckControlEvent::MixerMasterMasterFXTargetPress => {
-                mixer_master_master_fx_target_press(deck_state);
-            }
 
-            DeckControlEvent::MixerMasterFXSelect { delta } => {
-                log::warn!("Unbound Action: Mixer Master FX Select by {delta}");
+            DeckControlEvent::MixerMasterFXEffectPress { number } => {
+                mixer_master_fx_effect_press(deck_state, number);
             }
-            DeckControlEvent::MixerMasterFXParameterAdjust { delta } => {
-                log::warn!("Unbound Action: Mixer Master FX Parameter Adjust by {delta}");
-            }
-            DeckControlEvent::MixerMasterFXParameterSelectPress => {
-                log::warn!("Unbound Action: Mixer Master FX Parameter Select Press");
-            }
-            DeckControlEvent::MixerMasterFXBPMAdjust { delta } => {
-                log::warn!("Unbound Action: Mixer Master FX BPM Adjust by {delta}");
-            }
-            DeckControlEvent::MixerMasterFXBPMSelectPress => {
-                log::warn!("Unbound Action: Mixer Master FX BPM Select Press");
+            DeckControlEvent::MixerMasterFXParameterDecreasePress => {}
+            DeckControlEvent::MixerMasterFXParameterIncreasePress => {}
+            DeckControlEvent::MixerMasterFXTargetMasterPress => {
+                mixer_master_fx_target_master_press(deck_state);
             }
             DeckControlEvent::MixerMasterFXDepthSet { position } => {
                 mixer_master_fx_depth_set(deck_state, position);
             }
             DeckControlEvent::MixerMasterFXEnablePress => mixer_master_fx_enable_press(deck_state),
 
-            DeckControlEvent::MixerChannelFXPress { number } => {
-                log::warn!("Unbound Action: Mixer Channel FX {number} Press");
+            DeckControlEvent::MixerChannelFXEffectPress { number } => {
+                mixer_channel_fx_effect_press(deck_state, number);
+            }
+            DeckControlEvent::MixerChannelFXEffectRelease { number } => {
+                mixer_channel_fx_effect_release(deck_state, number);
             }
 
             DeckControlEvent::MixerCrossfaderSet { position } => {
@@ -83,8 +77,8 @@ impl DeckControlEvent {
             DeckControlEvent::MixerChannelCuePress { channel } => {
                 mixer_channel_cue_press(deck_state, channel);
             }
-            DeckControlEvent::MixerChannelMasterFXTargetPress { channel } => {
-                mixer_channel_master_fx_target_press(deck_state, channel);
+            DeckControlEvent::MixerMasterFXTargetChannelPress { number } => {
+                mixer_master_fx_target_channel_press(deck_state, number);
             }
 
             DeckControlEvent::MixerChannelFaderSet { channel, position } => {

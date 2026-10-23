@@ -32,6 +32,8 @@ pub fn set_deck_leds(
     deck_state: &DeckState,
     internal_deck_state: &InternalDeckState,
     flash_timers: &LEDFlashTimers,
+    flash_timers_updated: bool,
+    is_periodic_update: bool,
     device_interface: &mut DeviceInterface,
 ) {
     // master cue
@@ -44,14 +46,14 @@ pub fn set_deck_leds(
         if deck_state.master_cue { 127 } else { 0 },
     ));
 
-    for (channel, (channel_state, _internal_channel_state)) in deck_state
+    for (channel, (channel_state, internal_channel_state)) in deck_state
         .mixer_channels
         .iter()
         .zip(&internal_deck_state.mixer_channels)
         .enumerate()
     {
         let player_state = &channel_state.player;
-        // let internal_player_state = &internal_channel_state.player;
+        let internal_player_state = &internal_channel_state.player;
 
         // cue
         #[allow(clippy::indexing_slicing)]
@@ -437,98 +439,91 @@ pub fn set_deck_leds(
         // pads
         // colors:
         // 0x00 = dim
-        // 0x01 - 0x9f = bright colors
-        // 0xa0 = off
-        // 0xa1 = white
-        // 0xa2 - 0xfe = dim colors
-        // 0xff = din white
+        // 0x01 - 0x3e = bright colors
+        // 0x3f = off
+        // 0x40 = white
+        // 0x41 - 0x7e = dim colors
+        // 0x7f = dim white
 
         let pad_channel = [0x7, 0x9, 0xb, 0xd][channel];
 
-        for (i, pad_address) in PAD_ADDRESS_TABLE.iter().enumerate() {
-            let pad_address = *pad_address;
+        let current_track = player_state
+            .current_track
+            .as_ref()
+            .map(|(device, track)| (*device, track.id));
 
-            if let Some(analysis) = &channel_state.player.current_track_analysis
-                && let Some(cue) = analysis.hot_cues.iter().find(|cue| cue.number == i as u32)
-            {
+        if current_track != internal_player_state.last_loaded_track
+            || internal_channel_state.player.last_loaded_analysis
+                == channel_state.player.current_track_analysis.is_some()
+        {
+            for (i, pad_address) in PAD_ADDRESS_TABLE.iter().enumerate() {
+                let pad_address = *pad_address;
+
+                if let Some(analysis) = &channel_state.player.current_track_analysis
+                    && let Some(cue) = analysis.hot_cues.iter().find(|cue| cue.number == i as u32)
+                {
+                    device_interface.write_midi(addr_channel_value_to_midi(
+                        pad_address,
+                        pad_channel,
+                        cue.number as u8 + 1,
+                    ));
+                } else {
+                    device_interface.write_midi(addr_channel_value_to_midi(
+                        pad_address,
+                        pad_channel,
+                        0x3f,
+                    ));
+                }
+            }
+        }
+
+        if is_periodic_update {
+            for (i, pad_address) in PAD_ADDRESS_TABLE.iter().enumerate() {
+                let pad_address = *pad_address | 0x20;
+
                 device_interface.write_midi(addr_channel_value_to_midi(
                     pad_address,
                     pad_channel,
-                    cue.number as u8 + 1,
+                    if i % 2 == 0 { 0x20 } else { 0x26 } + if i > 7 { 0x40 } else { 0x00 },
                 ));
-            } else {
+            }
+
+            for (i, pad_address) in PAD_ADDRESS_TABLE.iter().enumerate() {
+                let pad_address = *pad_address | 0x60;
+
                 device_interface.write_midi(addr_channel_value_to_midi(
                     pad_address,
                     pad_channel,
-                    0xa0,
+                    0x20 + if i > 7 { 0x40 } else { 0x00 },
                 ));
             }
         }
 
-        for (i, pad_address) in PAD_ADDRESS_TABLE.iter().enumerate() {
-            let pad_address = *pad_address | 0x20;
+        if flash_timers_updated
+            || (player_state.keyshift - internal_player_state.last_keyshift).abs() > f32::EPSILON
+        {
+            let current_key_shift = player_state.keyshift.round() as i32;
 
-            device_interface.write_midi(addr_channel_value_to_midi(
-                pad_address,
-                pad_channel,
-                if i % 2 == 0 { 0x60 } else { 0x66 },
-            ));
+            for (i, pad_address) in PAD_ADDRESS_TABLE_KEY_SHIFT.iter().enumerate() {
+                let pad_address = *pad_address | 0x70;
+
+                #[allow(clippy::cast_possible_wrap)]
+                let key_shift = i as i32 - 7;
+
+                device_interface.write_midi(addr_channel_value_to_midi(
+                    pad_address,
+                    pad_channel,
+                    if key_shift == current_key_shift {
+                        if flash_timers.mid { 0x40 } else { 0x7f }
+                    } else if key_shift > 0 {
+                        0x18 + if key_shift > 4 { 0x40 } else { 0x00 }
+                    } else if key_shift < 0 {
+                        0x28 + if key_shift < -3 { 0x40 } else { 0x00 }
+                    } else {
+                        0x20
+                    },
+                ));
+            }
         }
-
-        for pad_address in PAD_ADDRESS_TABLE {
-            let pad_address = pad_address | 0x60;
-
-            device_interface.write_midi(addr_channel_value_to_midi(pad_address, pad_channel, 0x60));
-        }
-
-        let current_key_shift = channel_state.player.keyshift.round() as i32;
-
-        for (i, pad_address) in PAD_ADDRESS_TABLE_KEY_SHIFT.iter().enumerate() {
-            let pad_address = *pad_address | 0x70;
-
-            #[allow(clippy::cast_possible_wrap)]
-            let key_shift = i as i32 - 7;
-
-            device_interface.write_midi(addr_channel_value_to_midi(
-                pad_address,
-                pad_channel,
-                if key_shift == current_key_shift {
-                    if flash_timers.slow { 0xa1 } else { 0xff }
-                } else if key_shift > 0 {
-                    0x60
-                } else if key_shift < 0 {
-                    0x66
-                } else {
-                    0x63
-                },
-            ));
-        }
-
-        // // cue point
-        // if let Some(cue_point) = player_state.cue_time {
-        //     // 1_800_000_000 for 33.3 rpm
-        //     let cue_point: u16 =
-        // (((cue_point.nanoseconds.rem_euclid(1_800_000_000))         /
-        // 1_800_000_000)
-        //         * 0x0267) as u16;
-
-        //     device_interface.write_midi(addr_value_to_midi(
-        //         [0xBF1C, 0xBF1D, 0xBF1E, 0xBF1F][channel],
-        //         ((cue_point >> 8) & 0x00FF) as u8,
-        //     ));
-        //     device_interface.write_midi(addr_value_to_midi(
-        //         [0xBF3C, 0xBF3D, 0xBF3E, 0xBF3F][channel],
-        //         (cue_point & 0x00FF) as u8,
-        //     ));
-        // } else {
-        //     device_interface.write_midi(addr_value_to_midi(
-        //         [0xBF1C, 0xBF1D, 0xBF1E, 0xBF1F][channel],
-        //         0x7F,
-        //     ));
-        //     device_interface.write_midi(addr_value_to_midi(
-        //         [0xBF3C, 0xBF3D, 0xBF3E, 0xBF3F][channel],
-        //         0x7F,
-        //     ));
-        // }
     }
 }

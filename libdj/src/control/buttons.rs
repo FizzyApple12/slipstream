@@ -3,8 +3,8 @@ use timecode::{Duration, Timecode};
 use crate::{
     MIN_LOOP_SIZE_NANOSECONDS,
     types::deck::{
-        BeatLoopAdjustMode, BeatSyncMode, CrossFaderSide, DeckState, MasterFXChannel,
-        PlayDirection, PlayState, TempoRange,
+        BeatLoopAdjustMode, BeatSyncMode, ChannelFXEffect, CrossFaderSide, DeckState,
+        MasterFXChannel, MasterFXEffect, PlayDirection, PlayState, TempoRange,
     },
 };
 
@@ -12,7 +12,7 @@ pub fn mixer_master_cue_press(deck_state: &mut DeckState) {
     deck_state.master_cue = !deck_state.master_cue;
 }
 
-pub fn mixer_master_master_fx_target_press(deck_state: &mut DeckState) {
+pub fn mixer_master_fx_target_master_press(deck_state: &mut DeckState) {
     deck_state.master_fx.channel = MasterFXChannel::Master;
 }
 
@@ -26,9 +26,61 @@ pub fn mixer_channel_cue_press(deck_state: &mut DeckState, channel: usize) {
     }
 }
 
-pub fn mixer_channel_master_fx_target_press(deck_state: &mut DeckState, channel: usize) {
+pub fn mixer_master_fx_effect_press(deck_state: &mut DeckState, effect: usize) {
+    deck_state.master_fx.effect = match effect {
+        0 => MasterFXEffect::LowCutEcho,
+        1 => MasterFXEffect::Echo,
+        2 => MasterFXEffect::MultiTapDelay,
+        3 => MasterFXEffect::Spiral,
+        4 => MasterFXEffect::Reverb,
+        5 => MasterFXEffect::Transgate,
+        6 => MasterFXEffect::EnigmaJet,
+        7 => MasterFXEffect::Flanger,
+        8 => MasterFXEffect::Phaser,
+        9 => MasterFXEffect::Stretch,
+        10 => MasterFXEffect::SlipRoll,
+        11 => MasterFXEffect::Roll,
+        _ => {
+            return;
+        }
+    }
+}
+
+pub fn mixer_master_fx_target_channel_press(deck_state: &mut DeckState, channel: usize) {
     if deck_state.mixer_channels.get(channel).is_some() {
         deck_state.master_fx.channel = MasterFXChannel::Channel(channel);
+    }
+}
+
+pub fn mixer_channel_fx_effect_press(deck_state: &mut DeckState, effect: usize) {
+    deck_state.channel_fx_effect = match effect {
+        0 => ChannelFXEffect::Space,
+        1 => ChannelFXEffect::DubEcho,
+        2 => ChannelFXEffect::Bitcrush,
+        3 => ChannelFXEffect::Pitch,
+        4 => ChannelFXEffect::Noise,
+        5 => ChannelFXEffect::Filter,
+        _ => {
+            return;
+        }
+    }
+}
+
+pub fn mixer_channel_fx_effect_release(deck_state: &mut DeckState, effect: usize) {
+    if deck_state.channel_fx_effect
+        == match effect {
+            0 => ChannelFXEffect::Space,
+            1 => ChannelFXEffect::DubEcho,
+            2 => ChannelFXEffect::Bitcrush,
+            3 => ChannelFXEffect::Pitch,
+            4 => ChannelFXEffect::Noise,
+            5 => ChannelFXEffect::Filter,
+            _ => {
+                return;
+            }
+        }
+    {
+        deck_state.channel_fx_effect = ChannelFXEffect::None;
     }
 }
 

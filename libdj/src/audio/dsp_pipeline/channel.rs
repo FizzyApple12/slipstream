@@ -1,72 +1,61 @@
 use std::f32;
 
-use libdsp::{
-    audio_loader::TrackAudioData,
-    dsp::filters::{BiquadFilter, FilterConfiguration},
-};
+use libdsp::audio_loader::TrackAudioData;
 
 use crate::{
-    AUDIO_CHANNELS, MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH, MIXER_FILTER_HIGH_PASS_OCTAVES,
-    MIXER_FILTER_LOW_PASS_OCTAVES, MIXER_ISOLATOR_LOW_MID_TRANSITION,
+    AUDIO_CHANNELS, MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH, MIXER_ISOLATOR_LOW_MID_TRANSITION,
     MIXER_ISOLATOR_MID_HIGH_TRANSITION,
-    audio::dsp_pipeline::{filters::isolator::Isolator, player::PlayerDSP},
+    audio::dsp_pipeline::{
+        filters::{fx::ChannelFX, isolator::Isolator},
+        player::PlayerDSP,
+    },
     math::fader::SingleFader,
     playback::channel::ChannelUpdateResults,
-    types::deck::ChannelState,
+    types::deck::{ChannelFXEffect, ChannelState},
 };
 
-// i disagree!
-#[allow(clippy::type_complexity)]
 pub struct ChannelDSP {
-    target_sample_rate: u32,
+    _target_sample_rate: u32,
 
     player: PlayerDSP,
 
     pub amplitude_history: [[f32; MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH]; AUDIO_CHANNELS],
 
     gain: f32,
-    eq_low_coefficient: f32,
-    eq_mid_coefficient: f32,
-    eq_high_coefficient: f32,
-    filter_coefficient: f32,
 
     local_master_output_buffers: [Vec<f32>; AUDIO_CHANNELS],
     master_isolator: Isolator<AUDIO_CHANNELS>,
-    master_filter: (BiquadFilter<AUDIO_CHANNELS>, BiquadFilter<AUDIO_CHANNELS>),
+    master_channel_fx: ChannelFX<AUDIO_CHANNELS>,
 
     local_touch_cue_output_buffers: [Vec<f32>; AUDIO_CHANNELS],
     touch_cue_isolator: Isolator<AUDIO_CHANNELS>,
-    touch_cue_filter: (BiquadFilter<AUDIO_CHANNELS>, BiquadFilter<AUDIO_CHANNELS>),
+    touch_cue_channel_fx: ChannelFX<AUDIO_CHANNELS>,
 }
 
 impl ChannelDSP {
     pub fn new(sample_rate: u32) -> ChannelDSP {
         ChannelDSP {
-            target_sample_rate: sample_rate,
+            _target_sample_rate: sample_rate,
 
             player: PlayerDSP::new(sample_rate),
 
             amplitude_history: [[0.0; MIXER_AMPLITUDE_MEASUREMENT_HISTORY_LENGTH]; AUDIO_CHANNELS],
 
             gain: 0.0,
-            eq_low_coefficient: 0.0,
-            eq_mid_coefficient: 0.0,
-            eq_high_coefficient: 0.0,
-            filter_coefficient: 0.0,
 
             local_master_output_buffers: Default::default(),
             master_isolator: Isolator::new(
                 MIXER_ISOLATOR_LOW_MID_TRANSITION / f64::from(sample_rate),
                 MIXER_ISOLATOR_MID_HIGH_TRANSITION / f64::from(sample_rate),
             ),
-            master_filter: (BiquadFilter::default(), BiquadFilter::default()),
+            master_channel_fx: ChannelFX::new(sample_rate),
 
             local_touch_cue_output_buffers: Default::default(),
             touch_cue_isolator: Isolator::new(
                 MIXER_ISOLATOR_LOW_MID_TRANSITION / f64::from(sample_rate),
                 MIXER_ISOLATOR_MID_HIGH_TRANSITION / f64::from(sample_rate),
             ),
-            touch_cue_filter: (BiquadFilter::default(), BiquadFilter::default()),
+            touch_cue_channel_fx: ChannelFX::new(sample_rate),
         }
     }
 
@@ -82,6 +71,7 @@ impl ChannelDSP {
         &mut self,
         channel_state: &ChannelState,
         channel_update_results: &ChannelUpdateResults,
+        channel_fx_effect: ChannelFXEffect,
         master_output_buffers: &mut [Vec<f32>; AUDIO_CHANNELS],
         cue_output_buffers: &mut [Vec<f32>; AUDIO_CHANNELS],
         number_samples: usize,
@@ -106,12 +96,24 @@ impl ChannelDSP {
         );
 
         self.gain = channel_state.gain;
-        self.eq_low_coefficient = channel_state.eq_low;
-        self.eq_mid_coefficient = channel_state.eq_mid;
-        self.eq_high_coefficient = channel_state.eq_high;
-        self.filter_coefficient = channel_state.fx;
 
-        self.update_filters();
+        self.master_isolator.set_gains(
+            channel_state.eq_low + 1.0,
+            channel_state.eq_mid + 1.0,
+            channel_state.eq_high + 1.0,
+        );
+
+        self.master_channel_fx.set_effect(channel_fx_effect);
+        self.master_channel_fx.set_parameter(channel_state.fx);
+
+        self.touch_cue_isolator.set_gains(
+            channel_state.eq_low + 1.0,
+            channel_state.eq_mid + 1.0,
+            channel_state.eq_high + 1.0,
+        );
+
+        self.touch_cue_channel_fx.set_effect(channel_fx_effect);
+        self.touch_cue_channel_fx.set_parameter(channel_state.fx);
 
         let [local_master_left, local_master_right] = &mut self.local_master_output_buffers;
         let [master_left, master_right] = master_output_buffers;
@@ -125,33 +127,34 @@ impl ChannelDSP {
         {
             let root_sample = [*local_left * self.gain, *local_right * self.gain];
 
-            let filtered = self.master_isolator.process(root_sample);
+            let effected = self.master_channel_fx.process_pre_eq(root_sample);
 
-            let filter_low_filtered = self.master_filter.0.process(filtered);
-            let filter_high_filtered = self.master_filter.1.process(filtered);
+            let filtered = self.master_isolator.process(effected);
 
-            let [left_filtered, right_filtered] = if channel_state.fx < -f32::EPSILON {
-                filter_low_filtered
-            } else if channel_state.fx > f32::EPSILON {
-                filter_high_filtered
-            } else {
-                filtered
-            };
+            let [left_effected, right_effected] =
+                self.master_channel_fx.process_pre_fader(filtered);
 
             self.amplitude_history
                 .get_mut(0)
                 .unwrap()
-                .shift_left([left_filtered]);
+                .shift_left([left_effected]);
             self.amplitude_history
                 .get_mut(1)
                 .unwrap()
-                .shift_left([right_filtered]);
+                .shift_left([right_effected]);
 
-            *local_left = left_filtered;
-            *local_right = right_filtered;
+            *local_left = left_effected;
+            *local_right = right_effected;
 
-            *master_left = left_filtered.fade(channel_state.fade);
-            *master_right = right_filtered.fade(channel_state.fade);
+            let faded = [
+                left_effected.fade(channel_state.fade),
+                right_effected.fade(channel_state.fade),
+            ];
+
+            let [left_effected, right_effected] = self.master_channel_fx.process_pre_mixer(faded);
+
+            *master_left = left_effected;
+            *master_right = right_effected;
         }
 
         let [touch_cue_left, touch_cue_right] = &mut self.local_touch_cue_output_buffers;
@@ -168,21 +171,15 @@ impl ChannelDSP {
         {
             let root_sample = [*local_left * self.gain, *local_right * self.gain];
 
-            let filtered = self.touch_cue_isolator.process(root_sample);
+            let effected = self.touch_cue_channel_fx.process_pre_eq(root_sample);
 
-            let filter_low_filtered = self.touch_cue_filter.0.process(filtered);
-            let filter_high_filtered = self.touch_cue_filter.1.process(filtered);
+            let filtered = self.touch_cue_isolator.process(effected);
 
-            let [left_filtered, right_filtered] = if channel_state.fx < -f32::EPSILON {
-                filter_low_filtered
-            } else if channel_state.fx > f32::EPSILON {
-                filter_high_filtered
-            } else {
-                filtered
-            };
+            let [left_effected, right_effected] =
+                self.touch_cue_channel_fx.process_pre_fader(filtered);
 
-            *cue_left = left_filtered + if channel_state.cue { *master_left } else { 0.0 };
-            *cue_right = right_filtered
+            *cue_left = left_effected + if channel_state.cue { *master_left } else { 0.0 };
+            *cue_right = right_effected
                 + if channel_state.cue {
                     *master_right
                 } else {
@@ -193,53 +190,9 @@ impl ChannelDSP {
 
     pub fn reset(&mut self) {
         self.master_isolator.reset();
-        self.master_filter = (BiquadFilter::default(), BiquadFilter::default());
+        self.master_channel_fx.reset();
 
         self.touch_cue_isolator.reset();
-        self.touch_cue_filter = (BiquadFilter::default(), BiquadFilter::default());
-    }
-
-    #[allow(clippy::indexing_slicing)]
-    fn update_filters(&mut self) {
-        self.master_isolator.set_gains(
-            self.eq_low_coefficient + 1.0,
-            self.eq_mid_coefficient + 1.0,
-            self.eq_high_coefficient + 1.0,
-        );
-        self.touch_cue_isolator.set_gains(
-            self.eq_low_coefficient + 1.0,
-            self.eq_mid_coefficient + 1.0,
-            self.eq_high_coefficient + 1.0,
-        );
-
-        // todo: replace with a proper fx engine
-
-        self.master_filter.0.configure(FilterConfiguration::LowPass(
-            (-f64::from(self.filter_coefficient).min(0.0) / f64::from(self.target_sample_rate))
-                / f64::from(self.target_sample_rate),
-            MIXER_FILTER_LOW_PASS_OCTAVES,
-        ));
-        self.master_filter
-            .1
-            .configure(FilterConfiguration::HighPass(
-                (f64::from(self.filter_coefficient).max(0.0) / f64::from(self.target_sample_rate))
-                    / f64::from(self.target_sample_rate),
-                MIXER_FILTER_HIGH_PASS_OCTAVES,
-            ));
-
-        self.touch_cue_filter
-            .0
-            .configure(FilterConfiguration::LowPass(
-                (-f64::from(self.filter_coefficient).min(0.0) / f64::from(self.target_sample_rate))
-                    / f64::from(self.target_sample_rate),
-                MIXER_FILTER_LOW_PASS_OCTAVES,
-            ));
-        self.touch_cue_filter
-            .1
-            .configure(FilterConfiguration::HighPass(
-                (f64::from(self.filter_coefficient).max(0.0) / f64::from(self.target_sample_rate))
-                    / f64::from(self.target_sample_rate),
-                MIXER_FILTER_HIGH_PASS_OCTAVES,
-            ));
+        self.touch_cue_channel_fx.reset();
     }
 }

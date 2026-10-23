@@ -235,7 +235,7 @@ pub enum MasterFXChannel {
 pub enum MasterFXEffect {
     LowCutEcho,
     Echo,
-    Delay,
+    MultiTapDelay,
     Spiral,
     Reverb,
     Transgate,
@@ -255,8 +255,7 @@ pub struct MasterFX {
 
     pub enabled: bool,
 
-    pub length: f32,
-    pub percent: f32,
+    pub parameter: f32,
 
     pub depth: f32,
     pub bpm: f32,
@@ -272,8 +271,7 @@ impl Default for MasterFX {
 
             enabled: false,
 
-            length: 0.0,
-            percent: 0.0,
+            parameter: 0.0,
 
             depth: 0.0,
             bpm: 120.0,

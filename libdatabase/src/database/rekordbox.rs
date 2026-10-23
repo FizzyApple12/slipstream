@@ -178,9 +178,9 @@ impl RekordboxDatabase {
                                             Artwork {
                                                 id: artwork.id.0,
                                                 path: self.device_root.join(PathBuf::from(
-                                                    strip_path_string(&relativeify_path_string(
+                                                    relativeify_path_string(
                                                         artwork.path.to_string(),
-                                                    )),
+                                                    ),
                                                 )),
 
                                                 origin: OriginDatabase::Rekordbox,
@@ -323,15 +323,15 @@ impl RekordboxDatabase {
                                                     .unwrap_or(Key::from_semitones(0)),
 
                                                 audio_path: self.device_root.join(
-                                                    strip_path_string(&relativeify_path_string(
+                                                    relativeify_path_string(
                                                         track.offsets.file_path.to_string(),
-                                                    )),
+                                                    ),
                                                 ),
 
                                                 analysis_path: self.device_root.join(
-                                                    strip_path_string(&relativeify_path_string(
+                                                    relativeify_path_string(
                                                         track.offsets.analyze_path.to_string(),
-                                                    )),
+                                                    ),
                                                 ),
                                             },
                                         );
@@ -664,8 +664,11 @@ impl RekordboxDatabase {
     }
 }
 
-pub fn strip_path_string(path: &str) -> String {
-    path.replace(|c: char| !c.is_ascii(), "?")
+pub fn strip_path_string(path: PathBuf) -> PathBuf {
+    match path.into_string() {
+        Ok(path_string) => PathBuf::from(path_string.replace(|c: char| !c.is_ascii(), "?")),
+        Err(path) => path,
+    }
 }
 
 pub fn cue_color_from_index(color_index: u8) -> (u8, u8, u8) {
