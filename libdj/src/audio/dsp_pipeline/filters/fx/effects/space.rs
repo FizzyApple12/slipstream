@@ -48,13 +48,8 @@ impl<const CHANNELS: usize> Space<CHANNELS> {
             q,
         ));
 
-        self.reverb.set_params(
-            0.5,
-            0.5,
-            parameter.abs() * 0.35,
-            parameter.abs() * 0.5,
-            1.0 - (parameter.abs() * 0.5),
-        );
+        self.reverb
+            .set_params(0.5, 0.5, parameter.abs() * 0.35, parameter.abs() * 0.5, 1.0);
     }
 
     #[inline]
